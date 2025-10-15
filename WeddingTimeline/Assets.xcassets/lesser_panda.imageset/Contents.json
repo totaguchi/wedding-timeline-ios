@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "lesser_panda.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
