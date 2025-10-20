@@ -12,8 +12,6 @@ struct TimeLinePostView: View {
     let model: TimeLinePost
     @State private var galleryStartIndex = 0
     @State private var isGalleryPresented = false
-    @State private var isVideoPresented = false
-    @State private var selectedVideoURL: URL? = nil
     
     var body: some View {
         HStack(alignment: .top) {
@@ -50,10 +48,6 @@ struct TimeLinePostView: View {
                             galleryStartIndex = idx
                             isGalleryPresented = true
                             debugPrint(model.id)
-                        },
-                        onTapVideo: { url in
-                            selectedVideoURL = url
-                            isVideoPresented = true
                         }
                     )
                     .fullScreenCover(isPresented: $isGalleryPresented) {
@@ -61,12 +55,6 @@ struct TimeLinePostView: View {
                             urls: imageURLs,
                             startIndex: galleryStartIndex
                         )
-                    }
-                    .fullScreenCover(isPresented: $isVideoPresented) {
-                        if let url = selectedVideoURL {
-                            VideoPlayer(player: AVPlayer(url: url))
-                                .ignoresSafeArea()
-                        }
                     }
                 }
                 HStack(spacing: 30) {

@@ -12,7 +12,6 @@ struct MediaView: View {
     let mediaType: MediaKind
     let mediaUrls: [URL]
     var onTapImageAt: ((Int) -> Void)? = nil
-    var onTapVideo: ((URL) -> Void)? = nil
 
     var body: some View {
         switch mediaType {
