@@ -10,8 +10,17 @@ import AVKit
 
 struct TimeLinePostView: View {
     let model: TimeLinePost
+    let enableNavigation: Bool
+    let onToggleLike: (Bool) -> Void
     @State private var galleryStartIndex = 0
     @State private var isGalleryPresented = false
+    @State private var likeBusy = false
+    
+    init(model: TimeLinePost, enableNavigation: Bool = true, onToggleLike: @escaping (Bool) -> Void) {
+        self.model = model
+        self.enableNavigation = enableNavigation
+        self.onToggleLike = onToggleLike
+    }
     
     var body: some View {
         HStack(alignment: .top) {
@@ -19,28 +28,29 @@ struct TimeLinePostView: View {
                 .resizable()
                 .frame(width: 40, height: 40)
                 .clipShape(Circle())
+
             VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    Text(model.userName)
-                        .font(.subheadline)
-                    Text(model.createdAt.description)
-                        .font(.caption)
-                    Spacer()
+                if enableNavigation {
+                    NavigationLink {
+                        PostDetailView(model: model)
+                    } label: {
+                        headerAndContent
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    headerAndContent
                 }
-                Text(model.content)
-                    .fixedSize(horizontal: false, vertical: true)
-                // TODO: Mediaの表示系を整理する
-                // 動画は1件表示
-                // 画像は4件まで表示
+                
                 if let mediaType = model.media.first?.type,
                    mediaType != .unknown {
-                    // 画像のURL配列を一度だけ確定し、MediaView と Gallery の両方で同じ順序で使う
+                    // 画像URL配列は一度だけ計算し、MediaView と Gallery で同順を使う
                     let imageURLs: [URL] = model.media
                         .filter { $0.type == .image }
                         .compactMap { $0.mediaUrl }
                     let videoURL: URL? = model.media.first(where: { $0.type == .video })?.mediaUrl
                     let mediaURLsForView: [URL] = (mediaType == .video) ? (videoURL.map { [$0] } ?? []) : imageURLs
-
+                    
                     MediaView(
                         mediaType: mediaType,
                         mediaUrls: mediaURLsForView,
@@ -62,17 +72,43 @@ struct TimeLinePostView: View {
                         Image(systemName: "bubble.left")
                         Text("\(model.replyCount)")
                     }
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.2.squarepath")
-                        Text("\(model.retweetCount)")
+                    Button {
+                        guard !likeBusy else { return }
+                        likeBusy = true
+                        let newValue = !model.isLiked
+                        Task { @MainActor in
+                            await onToggleLike(newValue)
+                            likeBusy = false
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: model.isLiked ? "heart.fill" : "heart")
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(model.isLiked ? .red : .primary)
+                            Text("\(model.likeCount)")
+                        }
                     }
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart")
-                        Text("\(model.likeCount)")
-                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .disabled(likeBusy)
                 }
                 .font(.subheadline)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var headerAndContent: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(model.userName)
+                    .font(.subheadline)
+                Text(model.createdAt.description)
+                    .font(.caption)
+                Spacer()
+            }
+            Text(model.content)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

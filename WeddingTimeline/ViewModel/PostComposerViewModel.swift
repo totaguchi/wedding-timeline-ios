@@ -378,7 +378,9 @@ class PostComposerViewModel {
             "authorName": userName,
             "userIcon": userIcon,
             "createdAt": FieldValue.serverTimestamp(),
-            "media": mediaPayload
+            "media": mediaPayload,
+            "likneCount": 0,
+            "replyCount": 0
         ]
 
         try await docRef.setData(payload)

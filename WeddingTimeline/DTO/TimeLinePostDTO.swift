@@ -18,9 +18,9 @@ struct TimeLinePostDTO: Codable {
     let media: [MediaDTO]
     let replyCount: Int
     let retweetCount: Int
-    let likeCount: Int
+    var likeCount: Int?
 
-    enum CodingKeys: String, @preconcurrency CodingKey {
+    enum CodingKeys: String, CodingKey {
         case content, authorId, authorName, createdAt, media
         case userIcon
         case replyCount, retweetCount, likeCount

@@ -20,9 +20,22 @@ struct TimeLinePost: Identifiable {
     var replyCount: Int
     var retweetCount: Int
     var likeCount: Int
+    var isLiked: Bool
     var media: [Media]
     
-    init(id: String, authorId: String, userName: String, userIcon: String, content: String, createdAt: Date, replyCount: Int, retweetCount: Int, likeCount: Int, media: [Media] = []) {
+    init(
+        id: String,
+        authorId: String,
+        userName: String,
+        userIcon: String,
+        content: String,
+        createdAt: Date,
+        replyCount: Int,
+        retweetCount: Int,
+        likeCount: Int,
+        media: [Media] = [],
+        isLiked: Bool = false
+    ) {
         self.id = id
         self.authorId = authorId
         self.userName = userName
@@ -33,6 +46,7 @@ struct TimeLinePost: Identifiable {
         self.retweetCount = retweetCount
         self.likeCount = likeCount
         self.media = media
+        self.isLiked = isLiked
     }
 }
 
@@ -47,8 +61,9 @@ extension TimeLinePost {
             createdAt: dto.createdAt?.dateValue() ?? Date(),
             replyCount: dto.replyCount,
             retweetCount: dto.retweetCount,
-            likeCount: dto.likeCount,
-            media: (dto.media).compactMap { Media(dto: $0) }
+            likeCount: dto.likeCount ?? 0,
+            media: (dto.media).compactMap { Media(dto: $0) },
+            isLiked: false
         )
     }
 }

@@ -8,6 +8,7 @@
 import FirebaseFirestore
 import Foundation
 import SwiftUI
+import FirebaseAuth
 
 @Observable
 class TimeLineViewModel {
@@ -18,6 +19,7 @@ class TimeLineViewModel {
     private var knownIds = Set<String>()
     private var isFetching = false
     private var isRefreshing = false
+    private var likeInFlight: Set<String> = []
     
     // 新着のバッジ表示用（X っぽい動作）
     var newBadgeCount: Int = 0
@@ -112,7 +114,7 @@ class TimeLineViewModel {
     
     @MainActor
     func startListening(roomId: String, limit: Int = 20) {
-        // 既存の購読があれば停止（posts/knownIds/lastSnapshot は維持する）
+        // 既存の購読があれば停止（posts/knownIds/lastSnapshot は維持）。isLiked も統合済みストリームを利用。
         listenTask?.cancel()
         listenTask = nil
 
@@ -121,7 +123,7 @@ class TimeLineViewModel {
             knownIds.formUnion(posts.map { $0.id })
         }
 
-        let stream = postRepo.listenLatest(roomId: roomId, limit: limit)
+        let stream = postRepo.listenLatestWithIsLiked(roomId: roomId, limit: limit)
         listenTask = Task {
             do {
                 for try await items in stream {
@@ -168,6 +170,46 @@ class TimeLineViewModel {
     func revealPending() {
         consumePending()
     }
+    
+    @MainActor
+    func toggleLike(model: TimeLinePost, roomId: String, isLiked: Bool) async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let postId = model.id
+
+        // 連打抑止（同一 postId の like/unlike を同時に走らせない）
+        if likeInFlight.contains(postId) { return }
+        likeInFlight.insert(postId)
+        defer { likeInFlight.remove(postId) }
+
+        // 対象ポストのインデックスを取得
+        guard let idx = posts.firstIndex(where: { $0.id == postId }) else { return }
+
+        // 楽観更新：UI は常にモデルの値を表示
+        let old = posts[idx]
+        posts[idx].isLiked = isLiked
+        posts[idx].likeCount = max(0, posts[idx].likeCount + (isLiked ? 1 : -1))
+
+        do {
+            let newCount = try await postRepo.toggleLike(
+                roomId: roomId,
+                postId: postId,
+                uid: uid,
+                like: isLiked
+            )
+            // サーバーが返した確定値で補正
+            if let j = posts.firstIndex(where: { $0.id == postId }) {
+                posts[j].likeCount = newCount
+                posts[j].isLiked = isLiked
+            }
+        } catch {
+            // 失敗時はロールバック
+            if let j = posts.firstIndex(where: { $0.id == postId }) {
+                posts[j] = old
+            }
+            print("[Like] toggle failed:", error)
+        }
+    }
+        
 }
 
 extension TimeLineViewModel {
