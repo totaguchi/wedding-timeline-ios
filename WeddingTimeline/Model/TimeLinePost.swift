@@ -22,6 +22,7 @@ struct TimeLinePost: Identifiable {
     var likeCount: Int
     var isLiked: Bool
     var media: [Media]
+    var tag: PostTag
     
     init(
         id: String,
@@ -34,7 +35,8 @@ struct TimeLinePost: Identifiable {
         retweetCount: Int,
         likeCount: Int,
         media: [Media] = [],
-        isLiked: Bool = false
+        isLiked: Bool = false,
+        tag: PostTag = .unknown
     ) {
         self.id = id
         self.authorId = authorId
@@ -47,6 +49,7 @@ struct TimeLinePost: Identifiable {
         self.likeCount = likeCount
         self.media = media
         self.isLiked = isLiked
+        self.tag = tag
     }
 }
 
@@ -63,7 +66,8 @@ extension TimeLinePost {
             retweetCount: dto.retweetCount,
             likeCount: dto.likeCount ?? 0,
             media: (dto.media).compactMap { Media(dto: $0) },
-            isLiked: false
+            isLiked: false,
+            tag: PostTag(rawValue: dto.tag ?? "") ?? .unknown
         )
     }
 }

@@ -19,11 +19,13 @@ struct TimeLinePostDTO: Codable {
     let replyCount: Int
     let retweetCount: Int
     var likeCount: Int?
+    let tag: String?
 
     enum CodingKeys: String, CodingKey {
         case content, authorId, authorName, createdAt, media
         case userIcon
         case replyCount, retweetCount, likeCount
+        case tag
     }
 
     init(from decoder: Decoder) throws {
@@ -39,5 +41,6 @@ struct TimeLinePostDTO: Codable {
         replyCount   = try c.decodeIfPresent(Int.self, forKey: .replyCount) ?? 0
         retweetCount = try c.decodeIfPresent(Int.self, forKey: .retweetCount) ?? 0
         likeCount    = try c.decodeIfPresent(Int.self, forKey: .likeCount) ?? 0
+        tag          = try c.decodeIfPresent(String.self, forKey: .tag) ?? ""
     }
 }

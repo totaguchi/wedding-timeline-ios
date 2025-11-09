@@ -23,52 +23,55 @@ struct TimeLineView: View {
     var body: some View {
         ScrollViewReader { proxy in
             NavigationStack {
-                ScrollView {
-                    LazyVStack {
-                        // Top anchor & offset publisher
-                        Color.clear
-                            .frame(height: 0)
-                            .id("tl-top")
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: TLScrollTopKey.self,
-                                        value: geo.frame(in: .named("timelineScroll")).minY
-                                    )
-                                }
-                            )
-                        ForEach(model.posts, id: \.id) { post in
-                            TimeLinePostView(
-                                model: post) { isLiked in
-                                    Task {
-                                        await model.toggleLike(model: post, roomId: session.currentRoomId, isLiked: isLiked)
+                VStack(spacing: 0) {
+                    CategoryFilterBar(vm: model)
+                    ScrollView {
+                        LazyVStack {
+                            // Top anchor & offset publisher
+                            Color.clear
+                                .frame(height: 0)
+                                .id("tl-top")
+                                .background(
+                                    GeometryReader { geo in
+                                        Color.clear.preference(
+                                            key: TLScrollTopKey.self,
+                                            value: geo.frame(in: .named("timelineScroll")).minY
+                                        )
                                     }
-                                }
-                                .padding(.horizontal, 10)
-                                .onAppear {
-                                    if post.id == model.posts.last?.id {
-                                        Task { await model.fetchPosts(roomId: session.currentRoomId) }
+                                )
+                            ForEach(model.filteredPosts, id: \.id) { post in
+                                TimeLinePostView(
+                                    model: post) { isLiked in
+                                        Task {
+                                            await model.toggleLike(model: post, roomId: session.currentRoomId, isLiked: isLiked)
+                                        }
                                     }
-                                }
+                                    .padding(.horizontal, 10)
+                                    .onAppear {
+                                        if post.id == model.posts.last?.id {
+                                            Task { await model.fetchPosts(roomId: session.currentRoomId) }
+                                        }
+                                    }
+                            }
                         }
                     }
-                }
-                .coordinateSpace(name: "timelineScroll")
-                .safeAreaInset(edge: .top) {
-                    if model.newBadgeCount > 0 && !model.isAtTop {
-                        Button {
-                            withAnimation { proxy.scrollTo("tl-top", anchor: .top) }
-                            Task { model.revealPending() }
-                        } label: {
-                            Text("— \(model.newBadgeCount) 件の新着ポスト —")
-                                .font(.footnote.bold())
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(.thinMaterial, in: Capsule())
+                    .coordinateSpace(name: "timelineScroll")
+                    .safeAreaInset(edge: .top) {
+                        if model.newBadgeCount > 0 && !model.isAtTop {
+                            Button {
+                                withAnimation { proxy.scrollTo("tl-top", anchor: .top) }
+                                Task { model.revealPending() }
+                            } label: {
+                                Text("— \(model.newBadgeCount) 件の新着ポスト —")
+                                    .font(.footnote.bold())
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(.thinMaterial, in: Capsule())
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 4)
+                            .transition(.move(edge: .top).combined(with: .opacity))
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 4)
-                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
             }

@@ -51,6 +51,33 @@ struct PickedVideo: Transferable {
     }
 }
 
+// 挙式/披露宴タグ選択用
+private enum ComposeTag: String, CaseIterable, Identifiable {
+    case ceremony   // 挙式
+    case reception  // 披露宴
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .ceremony:  return "挙式"
+        case .reception: return "披露宴"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .ceremony:  return "heart"
+        case .reception: return "fork.knife"
+        }
+    }
+    /// Firestore に保存する際の生文字列（必要になったら submit 側へ渡す）
+    var firestoreRaw: String {
+        switch self {
+        case .ceremony:  return "ceremony"
+        case .reception: return "reception"
+        }
+    }
+}
+
 struct PostCreateView: View {
     @Environment(Session.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -60,6 +87,8 @@ struct PostCreateView: View {
     @State private var content: String = ""
     @State private var pickedItems: [PhotosPickerItem] = []
     @State private var attachments: [SelectedAttachment] = []
+    // タグ選択（必須）：挙式 or 披露宴
+    @State private var selectedTag: ComposeTag? = nil
 
     // MARK: - 制限ロジック
     private var currentMode: MediaMode? {
@@ -112,13 +141,15 @@ struct PostCreateView: View {
                             guard let cachedMember = session.cachedMember else {
                                 throw PostError.notLoggedIn
                             }
+                            // TODO: ViewModel 側の submit に `tagRaw: selectedTag!.firestoreRaw` を渡す
                             try await vm.submit(
                                 content: content.trimmingCharacters(in: .whitespacesAndNewlines),
                                 currentRoomId: cachedMember.roomId,
                                 userId: cachedMember.uid,
                                 userName: cachedMember.username,
                                 userIcon: cachedMember.userIcon ?? "",
-                                attachments: attachments
+                                attachments: attachments,
+                                tagRaw: selectedTag?.firestoreRaw
                             )
                             dismiss()
                         } catch {
@@ -133,10 +164,11 @@ struct PostCreateView: View {
                 .disabled(
                     vm.isUploading ||
                     content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    false
+                    selectedTag == nil
                 )
             }
             editorSection
+            tagSection   // ← 追加：スクショ風のチップUIでタグ選択
             attachmentsGridSection
             limitHintSection
             pickerSection
@@ -165,6 +197,24 @@ struct PostCreateView: View {
             AttachmentGrid(attachments: $attachments)
                 .animation(.default, value: attachments)
         }
+    }
+
+    @ViewBuilder private var tagSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("タグ")
+                .font(.headline)
+                .foregroundStyle(Color.pink)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                TagChip(tag: .ceremony, isSelected: selectedTag == .ceremony) {
+                    selectedTag = .ceremony
+                }
+                TagChip(tag: .reception, isSelected: selectedTag == .reception) {
+                    selectedTag = .reception
+                }
+            }
+        }
+        .padding(.top, 4)
     }
     
     @ViewBuilder private var limitHintSection: some View {
@@ -250,6 +300,32 @@ struct PostCreateView: View {
                     }
                 }
             }
+        }
+    }
+
+    private struct TagChip: View {
+        let tag: ComposeTag
+        let isSelected: Bool
+        let onTap: () -> Void
+        var body: some View {
+            Button(action: onTap) {
+                HStack(spacing: 8) {
+                    Image(systemName: tag.icon)
+                    Text(tag.displayName)
+                }
+                .font(.system(size: 15, weight: .semibold))
+                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+                .background(isSelected ? Color.pink.opacity(0.15) : Color.clear)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isSelected ? Color.clear : Color.secondary.opacity(0.25), lineWidth: 1)
+                )
+                .foregroundStyle(isSelected ? Color.pink : Color.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
     }
 

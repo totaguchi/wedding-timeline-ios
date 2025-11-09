@@ -334,7 +334,8 @@ class PostComposerViewModel {
                 userId: String,
                 userName: String,
                 userIcon: String,
-                attachments: [SelectedAttachment]) async throws {
+                attachments: [SelectedAttachment],
+                tagRaw: String?) async throws {
         isUploading = true
         progress = 0
         defer { isUploading = false }
@@ -347,6 +348,18 @@ class PostComposerViewModel {
             throw NSError(domain: "Post", code: 400, userInfo: [NSLocalizedDescriptionKey: "本文を入力してください"]) }
         guard !roomIdSan.isEmpty else {
             throw NSError(domain: "Post", code: 400, userInfo: [NSLocalizedDescriptionKey: "ルーム情報が取得できませんでした"]) }
+        // タグ（必須）：optional 引数をサニタイズ → 許可集合で検証
+        let tagSan: String
+        if let t = tagRaw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !t.isEmpty {
+            tagSan = t
+        } else {
+            throw NSError(domain: "Post", code: 400, userInfo: [NSLocalizedDescriptionKey: "タグを選択してください（挙式/披露宴）"])
+        }
+
+        let allowedTags: Set<String> = ["ceremony", "reception"]
+        guard allowedTags.contains(tagSan) else {
+            throw NSError(domain: "Post", code: 400, userInfo: [NSLocalizedDescriptionKey: "タグは挙式/披露宴のみ選択可能です"])
+        }
 
         // Firestore: /rooms/{roomId}/posts/{postId}
         let postsRef = db.collection("rooms").document(roomIdSan).collection("posts")
@@ -377,9 +390,10 @@ class PostComposerViewModel {
             "authorId": userId,
             "authorName": userName,
             "userIcon": userIcon,
+            "tag": tagSan,
             "createdAt": FieldValue.serverTimestamp(),
             "media": mediaPayload,
-            "likneCount": 0,
+            "likeCount": 0,
             "replyCount": 0
         ]
 

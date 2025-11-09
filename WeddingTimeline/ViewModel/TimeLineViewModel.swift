@@ -26,6 +26,15 @@ class TimeLineViewModel {
     private var pendingNew: [TimeLinePost] = []
     var isAtTop: Bool = true
     
+    // フィルター（上部チップ/タブ）
+    var selectedFilter: TimeLineFilter = .all
+    let availableFilters: [TimeLineFilter] = TimeLineFilter.allCases
+
+    var filteredPosts: [TimeLinePost] {
+        guard selectedFilter != .all else { return posts }
+        return posts.filter { matchesFilter($0, selectedFilter) }
+    }
+
     init () {}
     
     @MainActor
@@ -209,7 +218,14 @@ class TimeLineViewModel {
             print("[Like] toggle failed:", error)
         }
     }
-        
+    
+    private func matchesFilter(_ post: TimeLinePost, _ filter: TimeLineFilter) -> Bool {
+        switch filter {
+        case .all:       return true
+        case .ceremony:  return post.tag == .ceremony
+        case .reception:  return post.tag == .reception
+        }
+    }
 }
 
 extension TimeLineViewModel {

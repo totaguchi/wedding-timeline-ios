@@ -77,7 +77,7 @@ struct TimeLinePostView: View {
                         likeBusy = true
                         let newValue = !model.isLiked
                         Task { @MainActor in
-                            await onToggleLike(newValue)
+                            onToggleLike(newValue)
                             likeBusy = false
                         }
                     } label: {
@@ -107,8 +107,42 @@ struct TimeLinePostView: View {
                     .font(.caption)
                 Spacer()
             }
+            if model.tag != .unknown {
+                tagChip
+            }
             Text(model.content)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var tagChip: some View {
+        switch model.tag {
+        case .ceremony:
+            TagPill(systemName: "heart", text: "挙式", tint: .pink)
+        case .reception:
+            TagPill(systemName: "fork.knife", text: "披露宴", tint: Color.purple)
+        default:
+            EmptyView()
+        }
+    }
+
+    private struct TagPill: View {
+        let systemName: String
+        let text: String
+        let tint: Color
+        var body: some View {
+            HStack(spacing: 6) {
+                Image(systemName: systemName)
+                Text(text)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.12))
+            .foregroundStyle(tint)
+            .clipShape(Capsule())
         }
     }
 }
