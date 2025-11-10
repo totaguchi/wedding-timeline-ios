@@ -286,4 +286,69 @@ final class PostRepository {
         }
         return newCountNum.intValue
     }
+    
+    /// 新規投稿用の DocumentID を事前発行
+    func generatePostId(roomId: String) -> String {
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ref = db.collection("rooms").document(roomIdSan).collection("posts").document()
+        return ref.documentID
+    }
+
+    /// 新規投稿を作成（Firestore のみ、メディアは既にアップロード済み前提）
+    func createPost(
+        roomId: String,
+        postId: String,
+        content: String,
+        authorId: String,
+        authorName: String,
+        userIcon: String,
+        tag: String,
+        media: [MediaDTO]
+    ) async throws {
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let contentSan = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tagSan = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        // バリデーション
+        guard !contentSan.isEmpty else {
+            throw NSError(domain: "PostRepository", code: 400, userInfo: [NSLocalizedDescriptionKey: "本文を入力してください"])
+        }
+        guard !roomIdSan.isEmpty else {
+            throw NSError(domain: "PostRepository", code: 400, userInfo: [NSLocalizedDescriptionKey: "ルーム情報が取得できませんでした"])
+        }
+        let allowedTags: Set<String> = ["ceremony", "reception"]
+        guard allowedTags.contains(tagSan) else {
+            throw NSError(domain: "PostRepository", code: 400, userInfo: [NSLocalizedDescriptionKey: "タグは挙式/披露宴のみ選択可能です"])
+        }
+
+        // メディアのペイロード構築
+        var mediaPayload: [[String: Any]] = []
+        for m in media {
+            var item: [String: Any] = [
+                "id": m.id,
+                "type": m.type,
+                "mediaUrl": m.mediaUrl,
+                "width": m.width,
+                "height": m.height,
+            ]
+            if let d = m.duration { item["duration"] = d }
+            if let sp = m.storagePath { item["storagePath"] = sp }
+            mediaPayload.append(item)
+        }
+
+        let payload: [String: Any] = [
+            "content": contentSan,
+            "authorId": authorId,
+            "authorName": authorName,
+            "userIcon": userIcon,
+            "tag": tagSan,
+            "createdAt": FieldValue.serverTimestamp(),
+            "media": mediaPayload,
+            "likeCount": 0,
+            "replyCount": 0
+        ]
+
+        let docRef = db.collection("rooms").document(roomIdSan).collection("posts").document(postId)
+        try await docRef.setData(payload)
+    }
 }
