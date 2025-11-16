@@ -13,6 +13,7 @@ struct SelectedAttachment: Identifiable {
     let id = UUID()
     var kind: Kind
     var thumbnail: UIImage? // 動画プレビュー用
+    var isLoading: Bool = false
 }
 
 extension SelectedAttachment {
