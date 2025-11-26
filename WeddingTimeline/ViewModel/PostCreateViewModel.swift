@@ -1,5 +1,5 @@
 //
-//  PostComposerViewModel.swift
+//  PostCreateViewModel.swift
 //  WeddingTimeline
 //
 //  Created by 田口友暉 on 2025/08/25.
@@ -11,7 +11,7 @@ import Observation
 
 @MainActor
 @Observable
-class PostComposerViewModel {
+class PostCreateViewModel {
     private let postRepository = PostRepository()
     private let mediaService = MediaService()
 

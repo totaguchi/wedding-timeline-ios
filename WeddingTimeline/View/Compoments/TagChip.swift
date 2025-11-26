@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct TagChip: View {
-    let tag: ComposeTag
+    let tag: PostTag
     let isSelected: Bool
     let onTap: () -> Void
     var body: some View {

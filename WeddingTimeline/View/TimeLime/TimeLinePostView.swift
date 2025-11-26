@@ -68,10 +68,11 @@ struct TimeLinePostView: View {
                     }
                 }
                 HStack(spacing: 30) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "bubble.left")
-                        Text("\(model.replyCount)")
-                    }
+                    // TODO: コメント機能は未定
+//                    HStack(spacing: 4) {
+//                        Image(systemName: "bubble.left")
+//                        Text("\(model.replyCount)")
+//                    }
                     Button {
                         guard !likeBusy else { return }
                         likeBusy = true
@@ -147,7 +148,86 @@ struct TimeLinePostView: View {
     }
 }
 
-#Preview {
-//    let model = TimeLinePost(id: "1", userName: "山田太郎", userIcon: "person.fill", content: "投稿テキスト", createdAt: Date(), mediaType: "singleImage", mediaUrls:["sun.max.circle"], replyCount: 0, retweetCount: 0, likeCount: 0)
-//    TimeLinePostView(model: model)
+#Preview("画像1枚") {
+    NavigationStack {
+        ScrollView {
+            TimeLinePostView(
+                model: TimeLinePost(
+                    id: "preview-1",
+                    authorId: "user-123",
+                    userName: "田中太郎",
+                    userIcon: "lesser_panda",
+                    content: "結婚式の準備が着々と進んでいます！ドレスも決まりました✨",
+                    createdAt: Date(),
+                    replyCount: 3,
+                    retweetCount: 0,
+                    likeCount: 12,
+                    media: [
+                        Media(
+                            id: "media-1",
+                            type: .image,
+                            mediaUrl: URL(string: "file:///lesser_panda")!,
+                            pixelSize: CGSize(width: 800, height: 600),
+                            duration: nil,
+                            storagePath: nil
+                        )
+                    ],
+                    isLiked: false,
+                    tag: .ceremony
+                ),
+                onToggleLike: { _ in }
+            )
+            .padding()
+        }
+    }
+}
+
+#Preview("画像複数枚") {
+    NavigationStack {
+        ScrollView {
+            TimeLinePostView(
+                model: TimeLinePost(
+                    id: "preview-2",
+                    authorId: "user-456",
+                    userName: "山田花子",
+                    userIcon: "lesser_panda",
+                    content: "披露宴の会場写真です🎉 テーブルコーディネートも完璧！",
+                    createdAt: Date().addingTimeInterval(-3600),
+                    replyCount: 8,
+                    retweetCount: 2,
+                    likeCount: 45,
+                    media: [
+                        Media(
+                            id: "media-2",
+                            type: .image,
+                            mediaUrl: URL(string: "file:///lesser_panda")!,
+                            pixelSize: CGSize(width: 800, height: 600),
+                            duration: nil,
+                            storagePath: nil
+                        ),
+                        Media(
+                            id: "media-3",
+                            type: .image,
+                            mediaUrl: URL(string: "file:///lesser_panda")!,
+                            pixelSize: CGSize(width: 600, height: 800),
+                            duration: nil,
+                            storagePath: nil
+                        ),
+                        Media(
+                            id: "media-4",
+                            type: .image,
+                            mediaUrl: URL(string: "file:///lesser_panda")!,
+                            pixelSize: CGSize(width: 800, height: 600),
+                            duration: nil,
+                            storagePath: nil
+                        )
+                    ],
+                    isLiked: true,
+                    tag: .reception
+                ),
+                onToggleLike: { _ in }
+            )
+            .padding()
+        }
+    }
 }

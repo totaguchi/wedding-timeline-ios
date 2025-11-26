@@ -1,50 +1,11 @@
 //
-//  ImageGalleryView.swift
+//  ZoomableAsyncImage.swift
 //  WeddingTimeline
 //
-//  Created by 田口友暉 on 2025/10/08.
+//  Created by 田口友暉 on 2025/11/26.
 //
 
 import SwiftUI
-
-// MARK: - Fullscreen Image Gallery (X-like)
-struct ImageGalleryView: View {
-    let urls: [URL]
-    let startIndex: Int
-    @State private var index: Int = 0
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            TabView(selection: $index) {
-                ForEach(Array(urls.enumerated()), id: \.offset) { idx, url in
-                    ZoomableAsyncImage(url: url)
-                        .tag(idx)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .automatic))
-            .onAppear {
-                index = min(max(0, startIndex), max(0, urls.count - 1))
-            }
-
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.white)
-                        .padding(8)
-                }
-                Spacer()
-            }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-    }
-}
 
 struct ZoomableAsyncImage: View {
     let url: URL
@@ -81,7 +42,6 @@ struct ZoomableAsyncImage: View {
                         .frame(width: geo.size.width, height: geo.size.height)
                         .scaleEffect(scale)
                         .offset(offset)
-                        // Pinch-to-zoom should always work; horizontal swipes for TabView should work when not zoomed.
                         .gesture(
                             MagnificationGesture()
                                 .onChanged { value in
@@ -92,7 +52,6 @@ struct ZoomableAsyncImage: View {
                                     lastScale = scale
                                 }
                         )
-                        // When zoomed in, enable panning the image without stealing TabView swipes when scale == 1
                         .overlay(
                             Group {
                                 if scale > 1 {
@@ -137,4 +96,8 @@ struct ZoomableAsyncImage: View {
             .ignoresSafeArea()
         }
     }
+}
+
+#Preview {
+    // ZoomableAsyncImage()
 }

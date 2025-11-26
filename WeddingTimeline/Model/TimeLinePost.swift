@@ -71,3 +71,12 @@ extension TimeLinePost {
         )
     }
 }
+
+extension TimeLinePost: Equatable {
+    static func == (lhs: TimeLinePost, rhs: TimeLinePost) -> Bool {
+        return lhs.id == rhs.id &&
+        lhs.likeCount == rhs.likeCount &&
+        lhs.isLiked == rhs.isLiked
+    }
+}
+    

@@ -12,17 +12,17 @@ struct ContentView: View {
     
     var body: some View {
         TabView {
-            Tab("Received", systemImage: "tray.and.arrow.down.fill") {
+            Tab("タイムライン", systemImage: "house.fill") {
                 TimeLineView()
             }
             
             
-            Tab("Sent", systemImage: "tray.and.arrow.up.fill") {
+            Tab("ベストポスト", systemImage: "trophy.fill") {
                 BestPostView()
             }
             
             
-            Tab("Account", systemImage: "person.crop.circle.fill") {
+            Tab("設定", systemImage: "gearshape.fill") {
                 SettingView()
             }
         }

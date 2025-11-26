@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Nuke
 
 // Scroll offset probe for top detection
 private struct TLScrollTopKey: PreferenceKey {
@@ -19,6 +20,7 @@ struct TimeLineView: View {
     @Environment(Session.self) private var session
     @State private var model = TimeLineViewModel()
     @State private var isShowingCreateView = false
+    @State private var prefetcher = ImagePrefetcher()
     
     var body: some View {
         ScrollViewReader { proxy in
@@ -51,6 +53,12 @@ struct TimeLineView: View {
                                         if post.id == model.posts.last?.id {
                                             Task { await model.fetchPosts(roomId: session.currentRoomId) }
                                         }
+                                        // Preheat images for upcoming posts
+                                        preheatAround(postId: post.id, ahead: 12)
+                                    }
+                                    .onDisappear {
+                                        // Cancel preheating around posts that scrolled far away
+                                        cancelPreheatAround(postId: post.id, ahead: 20)
                                     }
                             }
                         }
@@ -90,6 +98,9 @@ struct TimeLineView: View {
         .onDisappear {
             Task { model.stopListening() }
         }
+        .onChange(of: model.filteredPosts.count) {
+            preheatInitialWindow()
+        }
         .overlay(alignment: .bottomTrailing) {
             if !isShowingCreateView {
                 Button {
@@ -97,6 +108,7 @@ struct TimeLineView: View {
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .resizable()
+                        .foregroundStyle(Color.pink.opacity(0.7))
                         .frame(width: 50, height: 50)
                         .padding(.trailing, 20)
                         .padding(.bottom)
@@ -113,6 +125,51 @@ struct TimeLineView: View {
             let atTop = y >= 0
             Task { model.markAtTop(atTop) }
         }
+    }
+    
+    // MARK: - Image Preheating (Nuke)
+    private func preheatInitialWindow(size: Int = 24) {
+        guard !model.filteredPosts.isEmpty else { return }
+        let upper = min(size - 1, model.filteredPosts.count - 1)
+        let urls = collectImageURLs(in: 0...upper)
+        guard !urls.isEmpty else { return }
+        prefetcher.startPrefetching(with: urls)
+    }
+
+    private func preheatAround(postId: String, ahead: Int) {
+        guard let idx = model.filteredPosts.firstIndex(where: { $0.id == postId }) else { return }
+        let start = idx
+        let end = min(model.filteredPosts.count - 1, idx + ahead)
+        guard start <= end else { return }
+        let urls = collectImageURLs(in: start...end)
+        guard !urls.isEmpty else { return }
+        prefetcher.startPrefetching(with: urls)
+    }
+
+    private func cancelPreheatAround(postId: String, ahead: Int) {
+        guard let idx = model.filteredPosts.firstIndex(where: { $0.id == postId }) else { return }
+        let start = max(0, idx - ahead)
+        let end = min(model.filteredPosts.count - 1, idx + ahead)
+        guard start <= end else { return }
+        let urls = collectImageURLs(in: start...end)
+        guard !urls.isEmpty else { return }
+        prefetcher.stopPrefetching(with: urls)
+    }
+
+    private func collectImageURLs(in range: ClosedRange<Int>) -> [URL] {
+        var out: [URL] = []
+        out.reserveCapacity((range.upperBound - range.lowerBound + 1) * 2)
+        for i in range {
+            guard i >= 0 && i < model.filteredPosts.count else { continue }
+            let p = model.filteredPosts[i]
+            // 画像系のみ対象（videoは除外）
+            for m in p.media {
+                if m.type == .image {
+                    out.append(m.mediaUrl)
+                }
+            }
+        }
+        return out
     }
 }
 

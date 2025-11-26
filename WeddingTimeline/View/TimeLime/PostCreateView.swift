@@ -51,44 +51,17 @@ struct PickedVideo: Transferable {
     }
 }
 
-// 挙式/披露宴タグ選択用
-enum ComposeTag: String, CaseIterable, Identifiable {
-    case ceremony   // 挙式
-    case reception  // 披露宴
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .ceremony:  return "挙式"
-        case .reception: return "披露宴"
-        }
-    }
-    var icon: String {
-        switch self {
-        case .ceremony:  return "heart"
-        case .reception: return "fork.knife"
-        }
-    }
-    /// Firestore に保存する際の生文字列（必要になったら submit 側へ渡す）
-    var firestoreRaw: String {
-        switch self {
-        case .ceremony:  return "ceremony"
-        case .reception: return "reception"
-        }
-    }
-}
-
 struct PostCreateView: View {
     @Environment(Session.self) private var session
     @Environment(\.dismiss) private var dismiss
-    @State private var vm = PostComposerViewModel()
+    @State private var vm = PostCreateViewModel()
     @FocusState private var editorFocused: Bool
 
     @State private var content: String = ""
     @State private var pickedItems: [PhotosPickerItem] = []
     @State private var attachments: [SelectedAttachment] = []
     // タグ選択（必須）：挙式 or 披露宴
-    @State private var selectedTag: ComposeTag? = nil
+    @State private var selectedTag: PostTag? = nil
     @State private var loadingPickerItem = false
 
     // MARK: - 制限ロジック
@@ -167,7 +140,6 @@ struct PostCreateView: View {
                             guard let cachedMember = session.cachedMember else {
                                 throw PostError.notLoggedIn
                             }
-                            // TODO: ViewModel 側の submit に `tagRaw: selectedTag!.firestoreRaw` を渡す
                             try await vm.submit(
                                 content: content.trimmingCharacters(in: .whitespacesAndNewlines),
                                 currentRoomId: cachedMember.roomId,
@@ -175,7 +147,7 @@ struct PostCreateView: View {
                                 userName: cachedMember.username,
                                 userIcon: cachedMember.userIcon ?? "",
                                 attachments: attachments,
-                                tagRaw: selectedTag?.firestoreRaw
+                                tagRaw: selectedTag?.firestoreValue
                             )
                             dismiss()
                         } catch {
@@ -224,7 +196,7 @@ struct PostCreateView: View {
                 .animation(.default, value: attachments)
         } else if loadingPickerItem {
             HStack {
-                ShimmerPlaceholder()
+                ShimmerPlaceholder(cornerRadius: 10)
                     .frame(width: 100, height: 100, alignment: .leading)
                 Spacer()
             }
@@ -350,43 +322,6 @@ struct PostCreateView: View {
                             }
                             .padding(6)
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    private struct ShimmerPlaceholder: View {
-        @State private var move: CGFloat = -1
-        var cornerRadius: CGFloat = 10
-
-        var body: some View {
-            GeometryReader { geo in
-                let w = geo.size.width
-                let h = geo.size.height
-                let gradient = LinearGradient(colors: [
-                    Color.gray.opacity(0.18),
-                    Color.gray.opacity(0.32),
-                    Color.gray.opacity(0.18)
-                ], startPoint: .leading, endPoint: .trailing)
-
-                ZStack {
-                    // base skeleton plate
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.16))
-                    // moving highlight band
-                    Rectangle()
-                        .fill(gradient)
-                        .frame(width: max(80, w * 0.55), height: h)
-                        .offset(x: move * (w + max(80, w * 0.55)))
-                }
-                .cornerRadius(cornerRadius)
-                .clipped()
-                .onAppear {
-                    // continuous left -> right sweep
-                    move = -1
-                    withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
-                        move = 1
                     }
                 }
             }

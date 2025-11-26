@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B61410EE2ECB6CE900FA9E79 /* Nuke in Frameworks */ = {isa = PBXBuildFile; productRef = B61410ED2ECB6CE900FA9E79 /* Nuke */; };
+		B61410F02ECB6CE900FA9E79 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = B61410EF2ECB6CE900FA9E79 /* NukeUI */; };
 		B66D2C1E2E24193C007F1739 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B66D2C1D2E24193C007F1739 /* FirebaseAuth */; };
 		B66D2C202E24193C007F1739 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = B66D2C1F2E24193C007F1739 /* FirebaseAuthCombine-Community */; };
 		B66D2C222E24193C007F1739 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = B66D2C212E24193C007F1739 /* FirebaseCore */; };
@@ -25,9 +27,22 @@
 		B66D2BF42E239DF7007F1739 /* WeddingTimeline.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WeddingTimeline.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B684E4B82ED3680100EA7C1C /* Exceptions for "WeddingTimeline" folder in "WeddingTimeline" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B66D2BF32E239DF7007F1739 /* WeddingTimeline */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B66D2BF62E239DF7007F1739 /* WeddingTimeline */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B684E4B82ED3680100EA7C1C /* Exceptions for "WeddingTimeline" folder in "WeddingTimeline" target */,
+			);
 			path = WeddingTimeline;
 			sourceTree = "<group>";
 		};
@@ -39,6 +54,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B66D2C1E2E24193C007F1739 /* FirebaseAuth in Frameworks */,
+				B61410F02ECB6CE900FA9E79 /* NukeUI in Frameworks */,
 				B66D2C2A2E24193C007F1739 /* FirebaseFunctions in Frameworks */,
 				B66D2C302E24193C007F1739 /* FirebaseMessaging in Frameworks */,
 				B66D2C2E2E24193C007F1739 /* FirebaseInAppMessaging-Beta in Frameworks */,
@@ -50,6 +66,7 @@
 				B66D2C202E24193C007F1739 /* FirebaseAuthCombine-Community in Frameworks */,
 				B66D2C342E24193C007F1739 /* FirebaseStorageCombine-Community in Frameworks */,
 				B66D2C2C2E24193C007F1739 /* FirebaseFunctionsCombine-Community in Frameworks */,
+				B61410EE2ECB6CE900FA9E79 /* Nuke in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -104,6 +121,8 @@
 				B66D2C2F2E24193C007F1739 /* FirebaseMessaging */,
 				B66D2C312E24193C007F1739 /* FirebaseStorage */,
 				B66D2C332E24193C007F1739 /* FirebaseStorageCombine-Community */,
+				B61410ED2ECB6CE900FA9E79 /* Nuke */,
+				B61410EF2ECB6CE900FA9E79 /* NukeUI */,
 			);
 			productName = WeddingTimeline;
 			productReference = B66D2BF42E239DF7007F1739 /* WeddingTimeline.app */;
@@ -135,6 +154,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				B66D2C1C2E24193C007F1739 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				B61410EC2ECB6CE900FA9E79 /* XCRemoteSwiftPackageReference "Nuke" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B66D2BF52E239DF7007F1739 /* Products */;
@@ -298,6 +318,8 @@
 				DEVELOPMENT_TEAM = C8U9PQWG6P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WeddingTimeline/Info.plist;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "画像を保存するためにフォトライブラリへのアクセスが必要です";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -331,6 +353,8 @@
 				DEVELOPMENT_TEAM = C8U9PQWG6P;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WeddingTimeline/Info.plist;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "画像を保存するためにフォトライブラリへのアクセスが必要です";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -378,6 +402,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		B61410EC2ECB6CE900FA9E79 /* XCRemoteSwiftPackageReference "Nuke" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kean/Nuke.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.8.0;
+			};
+		};
 		B66D2C1C2E24193C007F1739 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -389,6 +421,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		B61410ED2ECB6CE900FA9E79 /* Nuke */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B61410EC2ECB6CE900FA9E79 /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = Nuke;
+		};
+		B61410EF2ECB6CE900FA9E79 /* NukeUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B61410EC2ECB6CE900FA9E79 /* XCRemoteSwiftPackageReference "Nuke" */;
+			productName = NukeUI;
+		};
 		B66D2C1D2E24193C007F1739 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B66D2C1C2E24193C007F1739 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
