@@ -38,7 +38,7 @@ final class PostRepository {
 
     // 単発取得（ページング用にカーソル返す）
     func fetchPosts(roomId: String, limit: Int = 20, startAfter: DocumentSnapshot? = nil)
-    async throws -> (posts: [TimeLinePost], lastSnapshot: DocumentSnapshot?) {
+    async throws -> (posts: [TimelinePost], lastSnapshot: DocumentSnapshot?) {
         let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
         var q: Query = db.collection("rooms").document(roomIdSan)
             .collection("posts")
@@ -66,11 +66,11 @@ final class PostRepository {
             }
         }
 
-        let posts: [TimeLinePost] = snap.documents.compactMap { doc in
+        let posts: [TimelinePost] = snap.documents.compactMap { doc in
             do {
-                var dto = try doc.data(as: TimeLinePostDTO.self)
+                var dto = try doc.data(as: TimelinePostDTO.self)
                 dto.id = doc.documentID
-                if var model = TimeLinePost(dto: dto) {
+                if var model = TimelinePost(dto: dto) {
                     model.isLiked = likedSet.contains(doc.documentID)
                     return model
                 } else {
@@ -87,7 +87,7 @@ final class PostRepository {
 
     // リアルタイム購読（最新 N 件）
     func listenLatest(roomId: String, limit: Int = 20)
-    -> AsyncThrowingStream<[TimeLinePost], Error> {
+    -> AsyncThrowingStream<[TimelinePost], Error> {
         let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
         let q = db.collection("rooms").document(roomIdSan)
             .collection("posts")
@@ -98,11 +98,11 @@ final class PostRepository {
             let listener = q.addSnapshotListener { snap, err in
                 if let err { cont.yield(with: .failure(err)); return }
                 guard let snap else { return }
-                let posts: [TimeLinePost] = snap.documents.compactMap { doc in
+                let posts: [TimelinePost] = snap.documents.compactMap { doc in
                     do {
-                        var dto = try doc.data(as: TimeLinePostDTO.self)
+                        var dto = try doc.data(as: TimelinePostDTO.self)
                         if dto.id == nil { dto.id = doc.documentID }
-                        return TimeLinePost(dto: dto)
+                        return TimelinePost(dto: dto)
                     } catch {
                         print("[PostRepository] decode failed id=\(doc.documentID): \(error)")
                         return nil
@@ -122,7 +122,7 @@ final class PostRepository {
     /// リアルタイム購読（最新 N 件）+ 自分の isLiked を同時反映
     /// - Returns: posts 配列（各要素の `isLiked` は自分の likes から導出）
     func listenLatestWithIsLiked(roomId: String, limit: Int = 20)
-    -> AsyncThrowingStream<[TimeLinePost], Error> {
+    -> AsyncThrowingStream<[TimelinePost], Error> {
         // 未ログインの場合は通常版の購読にフォールバック
         guard let uid = Auth.auth().currentUser?.uid else {
             return listenLatest(roomId: roomId, limit: limit)
@@ -177,12 +177,12 @@ final class PostRepository {
     }
 
     // Helper: docs + likedSet から画面表示用の配列を構築
-    private func makePosts(from docs: [QueryDocumentSnapshot], likedSet: Set<String>) -> [TimeLinePost] {
+    private func makePosts(from docs: [QueryDocumentSnapshot], likedSet: Set<String>) -> [TimelinePost] {
         return docs.compactMap { doc in
             do {
-                var dto = try doc.data(as: TimeLinePostDTO.self)
+                var dto = try doc.data(as: TimelinePostDTO.self)
                 if dto.id == nil { dto.id = doc.documentID }
-                if var model = TimeLinePost(dto: dto) {
+                if var model = TimelinePost(dto: dto) {
                     model.isLiked = likedSet.contains(doc.documentID)
                     return model
                 } else {

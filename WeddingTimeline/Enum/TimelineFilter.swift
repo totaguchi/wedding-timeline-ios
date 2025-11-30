@@ -1,11 +1,11 @@
 //
-//  TimeLineFilter.swift
+//  TimelineFilter.swift
 //  WeddingTimeline
 //
 //  Created by 田口友暉 on 2025/11/03.
 //
 
-enum TimeLineFilter: String, CaseIterable, Identifiable, Sendable {
+enum TimelineFilter: String, CaseIterable, Identifiable, Sendable {
     case all = "すべて"
     case ceremony = "挙式"
     case reception = "披露宴"

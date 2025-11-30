@@ -1,5 +1,5 @@
 //
-//  TimeLinePostDTO.swift
+//  TimelinePostDTO.swift
 //  WeddingTimeline
 //
 //  Created by 田口友暉 on 2025/08/23.
@@ -8,7 +8,7 @@
 import FirebaseFirestore
 import Foundation
 
-struct TimeLinePostDTO: Codable {
+struct TimelinePostDTO: Codable {
     @DocumentID var id: String?            // 読み取り専用（書き込みでは使わない）
     let content: String
     let authorId: String

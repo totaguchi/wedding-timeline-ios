@@ -9,9 +9,82 @@ import Foundation
 import AVFoundation
 import FirebaseStorage
 import FirebaseAuth
+import UIKit
 
 /// メディア変換・アップロードを担当（actor で安全性確保）
+///
+/// ## 責務
+/// - 動画のトランスコード（MP4/H.264/AAC）
+/// - Storage へのアップロード（画像/動画）
+/// - MediaDTO の生成
+///
+/// ## 使用例
+/// ```swift
+/// let service = MediaService()
+/// let dtos = try await service.uploadMedia(
+///     attachments: [.image(uiImage), .video(videoURL)],
+///     roomId: "room123"
+/// )
+/// ```
 actor MediaService {
+    
+    // MARK: - Public API
+    
+    /// 複数の添付ファイルを Storage にアップロードし MediaDTO を返す
+    ///
+    /// - Parameters:
+    ///   - attachments: 添付メディア（画像 or 動画）
+    ///   - roomId: 投稿先の Room ID
+    /// - Returns: アップロード完了した MediaDTO の配列
+    /// - Throws: Storage/Transcode のエラー
+    /// - Note: postId と userId は内部で生成（Storage Rules の `{postId}/{authorId}` に準拠）
+    nonisolated func uploadMedia(
+        attachments: [SelectedAttachment.Kind],
+        roomId: String
+    ) async throws -> [MediaDTO] {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            throw AppError.unauthenticated
+        }
+        
+        // 一時的な postId を生成（Firestore に書き込む前に Storage パスを確定）
+        let postId = UUID().uuidString
+        
+        var results: [MediaDTO] = []
+        
+        for (index, kind) in attachments.enumerated() {
+            switch kind {
+            case .image(let uiImage):
+                guard let data = uiImage.jpegData(compressionQuality: 0.8) else {
+                    throw AppError.invalidData
+                }
+                let width = Int(uiImage.size.width)
+                let height = Int(uiImage.size.height)
+                
+                let dto = try await uploadImage(
+                    index: index,
+                    data: data,
+                    width: width,
+                    height: height,
+                    roomId: roomId,
+                    postId: postId,
+                    userId: uid
+                )
+                results.append(dto)
+                
+            case .video(let url):
+                let dto = try await uploadVideo(
+                    index: index,
+                    fileURL: url,
+                    roomId: roomId,
+                    postId: postId,
+                    userId: uid
+                )
+                results.append(dto)
+            }
+        }
+        
+        return results
+    }
     
     // MARK: - Transcoding
     
@@ -60,13 +133,13 @@ actor MediaService {
     ) async throws -> MediaDTO {
         // Storage rule preflight
         guard let currentUid = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "StorageAuth", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
+            throw AppError.unauthenticated
         }
         guard currentUid == userId else {
-            throw NSError(domain: "StorageAuth", code: 403, userInfo: [NSLocalizedDescriptionKey: "authorId must equal current auth.uid"])
+            throw AppError.unauthorized
         }
         if data.count >= 10 * 1024 * 1024 {
-            throw NSError(domain: "StorageRule", code: 413, userInfo: [NSLocalizedDescriptionKey: "Image too large (>= 10MB)"])
+            throw AppError.fileTooLarge("画像サイズが10MBを超えています")
         }
         
         let storage = Storage.storage()
@@ -78,7 +151,6 @@ actor MediaService {
         _ = try await ref.putDataAsync(data, metadata: meta)
         let url = try await ref.downloadURL().absoluteString
         
-        // MediaDTO は nonisolated なイニシャライザなので actor 内から呼べる
         return await MediaDTO(
             id: url,
             type: "image",
@@ -100,10 +172,10 @@ actor MediaService {
     ) async throws -> MediaDTO {
         // Storage rule preflight
         guard let currentUid = Auth.auth().currentUser?.uid else {
-            throw NSError(domain: "StorageAuth", code: 401, userInfo: [NSLocalizedDescriptionKey: "Not signed in"])
+            throw AppError.unauthenticated
         }
         guard currentUid == userId else {
-            throw NSError(domain: "StorageAuth", code: 403, userInfo: [NSLocalizedDescriptionKey: "authorId must equal current auth.uid"])
+            throw AppError.unauthorized
         }
         
         let mp4URL = try await transcodeToMP4(fileURL)
@@ -111,7 +183,7 @@ actor MediaService {
         let attrs = try FileManager.default.attributesOfItem(atPath: mp4URL.path)
         let byteCount = (attrs[.size] as? NSNumber)?.int64Value ?? 0
         if byteCount >= 200 * 1024 * 1024 {
-            throw NSError(domain: "StorageRule", code: 413, userInfo: [NSLocalizedDescriptionKey: "Video too large (>= 200MB)"])
+            throw AppError.fileTooLarge("動画サイズが200MBを超えています")
         }
         
         let storage = Storage.storage()
@@ -144,25 +216,15 @@ actor MediaService {
     /// iOS 17以前の AVAssetExportSession を async/await でラップ
     private nonisolated func awaitLegacyExport(_ session: AVAssetExportSession) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            // MainActor に分離されていない completion handler を使う
             session.exportAsynchronously {
                 switch session.status {
                 case .completed:
                     continuation.resume()
                 case .failed, .cancelled:
-                    let error = session.error ?? NSError(
-                        domain: "AVAssetExportSession",
-                        code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "Export failed or was cancelled"]
-                    )
+                    let error = session.error ?? AppError.transcodeError("Export failed or was cancelled")
                     continuation.resume(throwing: error)
                 default:
-                    let error = NSError(
-                        domain: "AVAssetExportSession",
-                        code: -2,
-                        userInfo: [NSLocalizedDescriptionKey: "Unexpected status: \(session.status.rawValue)"]
-                    )
-                    continuation.resume(throwing: error)
+                    continuation.resume(throwing: AppError.transcodeError("Unexpected status: \(session.status.rawValue)"))
                 }
             }
         }
@@ -201,7 +263,7 @@ actor MediaService {
             vInput.expectsMediaDataInRealTime = false
             vInput.transform = transform
             guard writer.canAdd(vInput) else {
-                throw NSError(domain: "Transcode", code: -10, userInfo: [NSLocalizedDescriptionKey: "Cannot add video input"])
+                throw AppError.transcodeError("Cannot add video input")
             }
             writer.add(vInput)
             videoInput = vInput
@@ -211,7 +273,7 @@ actor MediaService {
             ]
             let vOut = AVAssetReaderTrackOutput(track: vTrack, outputSettings: vOutputSettings)
             guard reader.canAdd(vOut) else {
-                throw NSError(domain: "Transcode", code: -11, userInfo: [NSLocalizedDescriptionKey: "Cannot add video output"])
+                throw AppError.transcodeError("Cannot add video output")
             }
             reader.add(vOut)
             videoOutput = vOut
@@ -232,7 +294,7 @@ actor MediaService {
             let aInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aSettings)
             aInput.expectsMediaDataInRealTime = false
             guard writer.canAdd(aInput) else {
-                throw NSError(domain: "Transcode", code: -12, userInfo: [NSLocalizedDescriptionKey: "Cannot add audio input"])
+                throw AppError.transcodeError("Cannot add audio input")
             }
             writer.add(aInput)
             audioInput = aInput
@@ -241,7 +303,7 @@ actor MediaService {
                 AVFormatIDKey: kAudioFormatLinearPCM
             ])
             guard reader.canAdd(aOut) else {
-                throw NSError(domain: "Transcode", code: -13, userInfo: [NSLocalizedDescriptionKey: "Cannot add audio output"])
+                throw AppError.transcodeError("Cannot add audio output")
             }
             reader.add(aOut)
             audioOutput = aOut
@@ -250,10 +312,10 @@ actor MediaService {
         // Start I/O
         writer.shouldOptimizeForNetworkUse = true
         guard writer.startWriting() else {
-            throw writer.error ?? NSError(domain: "Transcode", code: -14, userInfo: [NSLocalizedDescriptionKey: "Cannot start writer"])
+            throw writer.error ?? AppError.transcodeError("Cannot start writer")
         }
         guard reader.startReading() else {
-            throw reader.error ?? NSError(domain: "Transcode", code: -15, userInfo: [NSLocalizedDescriptionKey: "Cannot start reader"])
+            throw reader.error ?? AppError.transcodeError("Cannot start reader")
         }
         writer.startSession(atSourceTime: .zero)
         
@@ -298,11 +360,7 @@ actor MediaService {
                     if writer.status == .completed {
                         continuation.resume()
                     } else {
-                        let error = writer.error ?? NSError(
-                            domain: "Transcode",
-                            code: -16,
-                            userInfo: [NSLocalizedDescriptionKey: "Writer failed"]
-                        )
+                        let error = writer.error ?? AppError.transcodeError("Writer failed")
                         continuation.resume(throwing: error)
                     }
                 }
@@ -311,11 +369,7 @@ actor MediaService {
         
         // Reader のエラーチェック
         if reader.status == .failed {
-            throw reader.error ?? NSError(
-                domain: "Transcode",
-                code: -17,
-                userInfo: [NSLocalizedDescriptionKey: "Reader failed"]
-            )
+            throw reader.error ?? AppError.transcodeError("Reader failed")
         }
         
         return outURL

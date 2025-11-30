@@ -1,5 +1,5 @@
 //
-//  TimeLinePostView.swift
+//  TimelinePostView.swift
 //  WeddingTimeline
 //
 //  Created by 田口友暉 on 2025/07/13.
@@ -8,15 +8,15 @@
 import SwiftUI
 import AVKit
 
-struct TimeLinePostView: View {
-    let model: TimeLinePost
+struct TimelinePostView: View {
+    let model: TimelinePost
     let enableNavigation: Bool
     let onToggleLike: (Bool) -> Void
     @State private var galleryStartIndex = 0
     @State private var isGalleryPresented = false
     @State private var likeBusy = false
     
-    init(model: TimeLinePost, enableNavigation: Bool = true, onToggleLike: @escaping (Bool) -> Void) {
+    init(model: TimelinePost, enableNavigation: Bool = true, onToggleLike: @escaping (Bool) -> Void) {
         self.model = model
         self.enableNavigation = enableNavigation
         self.onToggleLike = onToggleLike
@@ -151,8 +151,8 @@ struct TimeLinePostView: View {
 #Preview("画像1枚") {
     NavigationStack {
         ScrollView {
-            TimeLinePostView(
-                model: TimeLinePost(
+            TimelinePostView(
+                model: TimelinePost(
                     id: "preview-1",
                     authorId: "user-123",
                     userName: "田中太郎",
@@ -185,8 +185,8 @@ struct TimeLinePostView: View {
 #Preview("画像複数枚") {
     NavigationStack {
         ScrollView {
-            TimeLinePostView(
-                model: TimeLinePost(
+            TimelinePostView(
+                model: TimelinePost(
                     id: "preview-2",
                     authorId: "user-456",
                     userName: "山田花子",

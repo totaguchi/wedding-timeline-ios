@@ -11,11 +11,6 @@ struct SettingView: View {
     // Session は signOut() のみ確実に存在する前提で参照
     @Environment(Session.self) var session: Session
 
-    // 画面に表示する基本プロフィール（未連携でもデフォルトで動くように）
-    var displayName: String = "佐藤 花子"
-    var handle: String = "@hanako_s"
-    var avatarURL: URL? = nil // 画像URLが無ければプレースホルダ
-
     // ナビゲーション先のプレースホルダ表示
     @State private var showProfile = false
     @State private var showNotification = false
@@ -32,25 +27,15 @@ struct SettingView: View {
                         .padding(.top, 8)
 
                     // 各セクション
-                    card {
-                        SettingRow(icon: "person.crop.circle", title: "プロフィール設定", subtitle: "名前やプロフィール画像を変更") {
-                            showProfile = true
-                        }
-                        Divider()
-                        SettingRow(icon: "bell", title: "通知設定", subtitle: "通知の受け取り方を設定") {
-                            showNotification = true
-                        }
-                    }
-
-                    card {
-                        SettingRow(icon: "lock", title: "プライバシー", subtitle: "アカウントの公開範囲を設定") {
-                            showPrivacy = true
-                        }
-                        Divider()
-                        SettingRow(icon: "paintbrush", title: "テーマ設定", subtitle: "アプリの外観をカスタマイズ") {
-                            showTheme = true
-                        }
-                    }
+//                    card {
+//                        SettingRow(icon: "lock", title: "プライバシー", subtitle: "アカウントの公開範囲を設定") {
+//                            showPrivacy = true
+//                        }
+//                        Divider()
+//                        SettingRow(icon: "paintbrush", title: "テーマ設定", subtitle: "アプリの外観をカスタマイズ") {
+//                            showTheme = true
+//                        }
+//                    }
 
                     card {
                         SettingRow(icon: "info.circle", title: "アプリについて", subtitle: "バージョン情報と利用規約") {
@@ -82,7 +67,7 @@ struct SettingView: View {
                     Task { await session.signOut() }
                 }
             } message: {
-                Text("アカウントからサインアウトします。よろしいですか？")
+                Text("ロームからログアウトします。よろしいですか？")
             }
         }
     }
@@ -92,16 +77,14 @@ struct SettingView: View {
 private extension SettingView {
     var profileHeader: some View {
         HStack(spacing: 16) {
-            AvatarView(url: avatarURL)
+            AvatarView(userIcon: session.cachedMember?.userIcon)
                 .frame(width: 64, height: 64)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(displayName)
+                Text(session.cachedMember?.username ?? "未設定")
                     .font(.title3.bold())
                     .foregroundStyle(.primary)
-                Text(handle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Spacer()
             }
             Spacer()
         }
@@ -201,25 +184,14 @@ private struct SettingRow: View {
 }
 
 private struct AvatarView: View {
-    var url: URL?
+    var userIcon: String?
 
     var body: some View {
         Group {
-            if let url {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        ZStack { Circle().fill(Color.gray.opacity(0.15)); ProgressView() }
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        Image(systemName: "person.crop.circle.fill")
-                            .resizable().scaledToFill()
-                            .foregroundStyle(.secondary)
-                    @unknown default:
-                        Color.gray.opacity(0.2)
-                    }
-                }
+            if let icon = userIcon {
+                Image(icon)
+                    .resizable().scaledToFill()
+                    .foregroundStyle(.secondary)
             } else {
                 Image(systemName: "person.crop.circle.fill")
                     .resizable().scaledToFill()

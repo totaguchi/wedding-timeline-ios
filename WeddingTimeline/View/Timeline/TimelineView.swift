@@ -1,5 +1,5 @@
 //
-//  TimeLineView.swift
+//  Timeline.swift
 //  WeddingTimeline
 //
 //  Created by 田口友暉 on 2025/07/13.
@@ -16,9 +16,9 @@ private struct TLScrollTopKey: PreferenceKey {
     }
 }
 
-struct TimeLineView: View {
+struct TimelineView: View {
     @Environment(Session.self) private var session
-    @State private var model = TimeLineViewModel()
+    @State private var model = TimelineViewModel()
     @State private var isShowingCreateView = false
     @State private var prefetcher = ImagePrefetcher()
     
@@ -27,6 +27,11 @@ struct TimeLineView: View {
             NavigationStack {
                 VStack(spacing: 0) {
                     CategoryFilterBar(vm: model)
+                    
+                    Rectangle()
+                      .frame(height: 1)
+                      .foregroundStyle(Color.pink.opacity(0.15))
+                    
                     ScrollView {
                         LazyVStack {
                             // Top anchor & offset publisher
@@ -37,12 +42,12 @@ struct TimeLineView: View {
                                     GeometryReader { geo in
                                         Color.clear.preference(
                                             key: TLScrollTopKey.self,
-                                            value: geo.frame(in: .named("timelineScroll")).minY
+                                            value: geo.frame(in: .named("TimelineScroll")).minY
                                         )
                                     }
                                 )
                             ForEach(model.filteredPosts, id: \.id) { post in
-                                TimeLinePostView(
+                                TimelinePostView(
                                     model: post) { isLiked in
                                         Task {
                                             await model.toggleLike(model: post, roomId: session.currentRoomId, isLiked: isLiked)
@@ -60,10 +65,15 @@ struct TimeLineView: View {
                                         // Cancel preheating around posts that scrolled far away
                                         cancelPreheatAround(postId: post.id, ahead: 20)
                                     }
+                                if post.id != model.filteredPosts.last?.id {
+                                    Rectangle()
+                                      .frame(height: 1)
+                                      .foregroundStyle(Color.pink.opacity(0.15))
+                                }
                             }
                         }
                     }
-                    .coordinateSpace(name: "timelineScroll")
+                    .coordinateSpace(name: "TimelineScroll")
                     .safeAreaInset(edge: .top) {
                         if model.newBadgeCount > 0 && !model.isAtTop {
                             Button {
@@ -116,7 +126,7 @@ struct TimeLineView: View {
             }
         }
         .fullScreenCover(isPresented: $isShowingCreateView) {
-            PostCreateView()
+            PostCreateView(roomId: session.currentRoomId)
                 .toolbar(.hidden, for: .tabBar) // Hide tab bar while the full-screen cover is shown
         }
         .toolbar(isShowingCreateView ? .hidden : .visible, for: .tabBar)
@@ -174,5 +184,5 @@ struct TimeLineView: View {
 }
 
 #Preview {
-    TimeLineView()
+    TimelineView()
 }

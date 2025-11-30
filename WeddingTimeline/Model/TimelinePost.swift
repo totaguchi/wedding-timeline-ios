@@ -1,5 +1,5 @@
 //
-//  TimeLinePost.swift
+//  TimelinePost.swift
 //  WeddingTimeline
 //
 //  Created by 田口友暉 on 2025/07/13.
@@ -10,7 +10,7 @@ import Foundation
 import Observation
 import SwiftUI
 
-struct TimeLinePost: Identifiable {
+struct TimelinePost: Identifiable {
     var id: String
     var authorId: String
     var userName: String
@@ -53,8 +53,8 @@ struct TimeLinePost: Identifiable {
     }
 }
 
-extension TimeLinePost {
-    init?(dto: TimeLinePostDTO) {
+extension TimelinePost {
+    init?(dto: TimelinePostDTO) {
         self.init(
             id: dto.id!,
             authorId: dto.authorId,
@@ -72,8 +72,8 @@ extension TimeLinePost {
     }
 }
 
-extension TimeLinePost: Equatable {
-    static func == (lhs: TimeLinePost, rhs: TimeLinePost) -> Bool {
+extension TimelinePost: Equatable {
+    static func == (lhs: TimelinePost, rhs: TimelinePost) -> Bool {
         return lhs.id == rhs.id &&
         lhs.likeCount == rhs.likeCount &&
         lhs.isLiked == rhs.isLiked

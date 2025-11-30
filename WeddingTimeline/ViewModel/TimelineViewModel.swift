@@ -1,5 +1,5 @@
 //
-//  TimeLineModel.swift
+//  TimelineModel.swift
 //  WeddingTimeline
 //
 //  Created by 田口友暉 on 2025/08/17.
@@ -11,8 +11,8 @@ import SwiftUI
 import FirebaseAuth
 
 @Observable
-class TimeLineViewModel {
-    var posts: [TimeLinePost] = []
+class TimelineViewModel {
+    var posts: [TimelinePost] = []
     private let postRepo = PostRepository()
     private var lastSnapshot: DocumentSnapshot? = nil
     private var listenTask: Task<Void, Never>? = nil
@@ -23,14 +23,14 @@ class TimeLineViewModel {
     
     // 新着のバッジ表示用（X っぽい動作）
     var newBadgeCount: Int = 0
-    private var pendingNew: [TimeLinePost] = []
+    private var pendingNew: [TimelinePost] = []
     var isAtTop: Bool = true
     
     // フィルター（上部チップ/タブ）
-    var selectedFilter: TimeLineFilter = .all
-    let availableFilters: [TimeLineFilter] = TimeLineFilter.allCases
+    var selectedFilter: TimelineFilter = .all
+    let availableFilters: [TimelineFilter] = TimelineFilter.allCases
 
-    var filteredPosts: [TimeLinePost] {
+    var filteredPosts: [TimelinePost] {
         guard selectedFilter != .all else { return posts }
         return posts.filter { matchesFilter($0, selectedFilter) }
     }
@@ -60,7 +60,7 @@ class TimeLineViewModel {
             knownIds.formUnion(newOnes.map { $0.id })
             lastSnapshot = cursor
         } catch {
-            print("[TimeLineViewModel] Error fetching posts: \(error)")
+            print("[TimelineViewModel] Error fetching posts: \(error)")
         }
     }
 
@@ -79,7 +79,7 @@ class TimeLineViewModel {
             )
 
             // 既存は更新、未知は先頭に追加（重複防止）
-            var toInsert: [TimeLinePost] = []
+            var toInsert: [TimelinePost] = []
             for item in head {
                 if let idx = posts.firstIndex(where: { $0.id == item.id }) {
                     posts[idx] = item
@@ -98,7 +98,7 @@ class TimeLineViewModel {
                 }
             }
         } catch {
-            print("[TimeLineViewModel] Error refreshing head: \(error)")
+            print("[TimelineViewModel] Error refreshing head: \(error)")
         }
     }
     
@@ -139,7 +139,7 @@ class TimeLineViewModel {
                     await MainActor.run { [weak self] in
                         guard let self else { return }
 
-                        var toInsert: [TimeLinePost] = []
+                        var toInsert: [TimelinePost] = []
 
                         // 既存IDは更新・未知IDは先頭挿入 or バッファに収集
                         for item in items {
@@ -164,7 +164,7 @@ class TimeLineViewModel {
                     }
                 }
             } catch {
-                print("[TimeLineViewModel] listen error: \(error)")
+                print("[TimelineViewModel] listen error: \(error)")
             }
         }
     }
@@ -181,7 +181,7 @@ class TimeLineViewModel {
     }
     
     @MainActor
-    func toggleLike(model: TimeLinePost, roomId: String, isLiked: Bool) async {
+    func toggleLike(model: TimelinePost, roomId: String, isLiked: Bool) async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         let postId = model.id
 
@@ -219,7 +219,7 @@ class TimeLineViewModel {
         }
     }
     
-    private func matchesFilter(_ post: TimeLinePost, _ filter: TimeLineFilter) -> Bool {
+    private func matchesFilter(_ post: TimelinePost, _ filter: TimelineFilter) -> Bool {
         switch filter {
         case .all:       return true
         case .ceremony:  return post.tag == .ceremony
@@ -228,7 +228,7 @@ class TimeLineViewModel {
     }
 }
 
-extension TimeLineViewModel {
-//    static let model1 = TimeLinePost(userName: "山田太郎", userIcon: "person.fill", content: "投稿テキスト", createdAt: Date(), mediaType: "singleImage", mediaUrls: ["sun.max.circle"], replyCount: 0, retweetCount: 0, likeCount: 0)
-//    static let model2 = TimeLinePost(id: "1", userName: "山田太郎", userIcon: "person.fill", content: "投稿テキスト", createdAt: Date(), mediaType: "video", mediaUrls:["sample001"], replyCount: 0, retweetCount: 0, likeCount: 0)
+extension TimelineViewModel {
+//    static let model1 = TimelinePost(userName: "山田太郎", userIcon: "person.fill", content: "投稿テキスト", createdAt: Date(), mediaType: "singleImage", mediaUrls: ["sun.max.circle"], replyCount: 0, retweetCount: 0, likeCount: 0)
+//    static let model2 = TimelinePost(id: "1", userName: "山田太郎", userIcon: "person.fill", content: "投稿テキスト", createdAt: Date(), mediaType: "video", mediaUrls:["sample001"], replyCount: 0, retweetCount: 0, likeCount: 0)
 }

@@ -10,7 +10,7 @@ import FirebaseFirestore
 
 @Observable
 final class BestPostViewModel {
-    var top3: [TimeLinePost] = []
+    var top3: [TimelinePost] = []
     var isLoading = false
     var errorMessage: String? = nil
 
@@ -34,10 +34,10 @@ final class BestPostViewModel {
             q = q.order(by: "likeCount", descending: true).limit(to: 3)
 
             let snap = try await q.getDocuments(source: .server)
-            let models: [TimeLinePost] = try snap.documents.compactMap { doc in
-                var dto = try doc.data(as: TimeLinePostDTO.self)
+            let models: [TimelinePost] = try snap.documents.compactMap { doc in
+                var dto = try doc.data(as: TimelinePostDTO.self)
                 dto.id = doc.documentID
-                return TimeLinePost(dto: dto)
+                return TimelinePost(dto: dto)
             }
             self.top3 = models
             self.errorMessage = nil

@@ -9,18 +9,31 @@ import SwiftUI
 import AVFoundation
 
 struct SelectedAttachment: Identifiable {
-    enum Kind { case image(UIImage), video(URL) }
+    /// メディアの種類（画像または動画）
+    enum Kind {
+        case image(UIImage)
+        case video(URL)
+    }
+    
     let id = UUID()
-    var kind: Kind
-    var thumbnail: UIImage? // 動画プレビュー用
+    
+    /// メディアの種類（Optional: 読み込み中プレースホルダー用）
+    var kind: Kind?
+    
+    /// 動画プレビュー用サムネイル
+    var thumbnail: UIImage?
+    
+    /// 読み込み中フラグ（プレースホルダー表示用）
     var isLoading: Bool = false
 }
 
 extension SelectedAttachment {
+    /// MediaKind への変換（Firestore 保存用）
     var mediaKind: MediaKind {
         switch kind {
         case .image: return .image
         case .video: return .video
+        case .none: return .image  // Fallback（通常は発生しない）
         }
     }
 }

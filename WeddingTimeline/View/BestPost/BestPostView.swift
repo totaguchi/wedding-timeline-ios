@@ -118,7 +118,7 @@ private struct FilterChip: View {
 }
 
 private struct RankCard: View {
-    let model: TimeLinePost
+    let model: TimelinePost
     let rank: Int
 
     @State private var galleryStartIndex = 0

@@ -8,11 +8,11 @@
 import SwiftUI
 
 struct PostDetailView: View {
-    let model: TimeLinePost
+    let model: TimelinePost
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                TimeLinePostView(model: model, enableNavigation: false) { _ in }
+                TimelinePostView(model: model, enableNavigation: false) { _ in }
             }
             .padding()
         }

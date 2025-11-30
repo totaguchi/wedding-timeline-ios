@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct CategoryFilterBar: View {
-    @Bindable var vm: TimeLineViewModel
+    @Bindable var vm: TimelineViewModel
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
