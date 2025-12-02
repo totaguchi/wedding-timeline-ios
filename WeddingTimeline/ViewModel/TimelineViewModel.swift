@@ -227,8 +227,3 @@ class TimelineViewModel {
         }
     }
 }
-
-extension TimelineViewModel {
-//    static let model1 = TimelinePost(userName: "山田太郎", userIcon: "person.fill", content: "投稿テキスト", createdAt: Date(), mediaType: "singleImage", mediaUrls: ["sun.max.circle"], replyCount: 0, retweetCount: 0, likeCount: 0)
-//    static let model2 = TimelinePost(id: "1", userName: "山田太郎", userIcon: "person.fill", content: "投稿テキスト", createdAt: Date(), mediaType: "video", mediaUrls:["sample001"], replyCount: 0, retweetCount: 0, likeCount: 0)
-}

@@ -42,7 +42,7 @@ struct AutoPlayVideoView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(.black.opacity(0.5))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(TLColor.icoWhite)
                             .clipShape(Capsule())
 
                         Spacer()
@@ -53,7 +53,7 @@ struct AutoPlayVideoView: View {
                         }) {
                             Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(TLColor.icoWhite)
                                 .padding(6)
                                 .background(.black.opacity(0.5))
                                 .clipShape(Circle())
@@ -147,4 +147,3 @@ struct AutoPlayVideoView: View {
         return String(format: "%02d:%02d", m, s)
     }
 }
-

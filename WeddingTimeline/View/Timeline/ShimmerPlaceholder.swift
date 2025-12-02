@@ -23,9 +23,9 @@ struct ShimmerPlaceholder: View {
             // グラデーション定義（淡いグレー → 明るめグレー → 淡いグレー）
             let gradient = LinearGradient(
                 colors: [
-                    Color.gray.opacity(0.18),
-                    Color.gray.opacity(0.32),
-                    Color.gray.opacity(0.18)
+                    AppColor.gray400.opacity(0.18),
+                    AppColor.gray500.opacity(0.32),
+                    AppColor.gray400.opacity(0.18)
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
@@ -34,7 +34,7 @@ struct ShimmerPlaceholder: View {
             ZStack {
                 // ベースのスケルトンプレート
                 Rectangle()
-                    .fill(Color.gray.opacity(0.16))
+                    .fill(AppColor.gray400.opacity(0.16))
 
                 // 移動するハイライトバンド
                 Rectangle()

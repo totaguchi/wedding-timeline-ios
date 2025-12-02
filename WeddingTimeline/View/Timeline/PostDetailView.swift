@@ -9,10 +9,12 @@ import SwiftUI
 
 struct PostDetailView: View {
     let model: TimelinePost
+    let onToggleLike: (Bool) -> Void
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                TimelinePostView(model: model, enableNavigation: false) { _ in }
+                TimelinePostView(model: model, enableNavigation: false, onToggleLike: onToggleLike)
             }
             .padding()
         }

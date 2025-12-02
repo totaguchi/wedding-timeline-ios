@@ -27,8 +27,8 @@ struct PostImagesView: View {
                     Image(systemName: "photo")
                         .resizable()
                         .scaledToFit()
-                        .foregroundStyle(.secondary)
-                        .background(Color.gray.opacity(0.2))
+                        .foregroundStyle(TLColor.icoAction)
+                        .background(AppColor.gray400.opacity(0.2))
                 } else {
                     ShimmerPlaceholder(cornerRadius: 10)
                 }
@@ -52,8 +52,8 @@ struct PostImagesView: View {
                             Image(systemName: "photo")
                                 .resizable()
                                 .scaledToFit()
-                                .foregroundStyle(.secondary)
-                                .background(Color.gray.opacity(0.2))
+                                .foregroundStyle(TLColor.icoAction)
+                                .background(AppColor.gray400.opacity(0.2))
                         } else {
                             ShimmerPlaceholder(cornerRadius: 6)
                         }

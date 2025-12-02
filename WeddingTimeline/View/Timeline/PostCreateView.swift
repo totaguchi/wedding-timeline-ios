@@ -108,7 +108,7 @@ struct PostCreateView: View {
             .overlay(alignment: .topLeading) {
                 if viewModel.text.isEmpty {
                     Text("今何してる？")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(TLColor.textMeta)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 16)
                         .allowsHitTesting(false)
@@ -121,7 +121,7 @@ struct PostCreateView: View {
         HStack {
             Text("カテゴリ")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TLColor.textMeta)
             
             Spacer()
             
@@ -173,7 +173,7 @@ private struct AttachmentGrid: View {
                         // 読み込み中
                         ShimmerPlaceholder(cornerRadius: 10)
                         ProgressView()
-                            .tint(.white)
+                            .tint(TLColor.icoWhite)
                     } else {
                         // 読み込み完了
                         attachmentThumbnail(att)
@@ -188,7 +188,7 @@ private struct AttachmentGrid: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.title3)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(TLColor.icoWhite)
                                 .background(Circle().fill(.black.opacity(0.5)))
                         }
                         .padding(4)
@@ -218,15 +218,15 @@ private struct AttachmentGrid: View {
                     
                     Image(systemName: "play.circle.fill")
                         .font(.largeTitle)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(TLColor.icoWhite)
                         .shadow(radius: 4)
                 }
             } else {
                 Rectangle()
-                    .fill(Color.gray.opacity(0.3))
+                    .fill(AppColor.gray400.opacity(0.3))
                     .overlay {
                         Image(systemName: "video")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(TLColor.textMeta)
                     }
             }
         case .none:

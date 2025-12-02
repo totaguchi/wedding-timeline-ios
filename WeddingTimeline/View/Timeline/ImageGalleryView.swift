@@ -44,7 +44,7 @@ struct ImageGalleryView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(TLColor.icoWhite)
                             .padding(8)
                     }
                     .accessibilityLabel("閉じる")
@@ -59,12 +59,12 @@ struct ImageGalleryView: View {
                     } label: {
                         if isPreparingShare {
                             ProgressView()
-                                .tint(.white)
+                                .tint(TLColor.icoWhite)
                                 .padding(8)
                         } else {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.title2)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(TLColor.icoWhite)
                                 .padding(8)
                         }
                     }
@@ -82,7 +82,7 @@ struct ImageGalleryView: View {
                     Spacer()
                     Text("写真を保存しました")
                         .font(.callout)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(TLColor.icoWhite)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .background(.ultraThinMaterial, in: Capsule())

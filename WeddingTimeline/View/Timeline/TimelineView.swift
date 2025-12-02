@@ -30,7 +30,7 @@ struct TimelineView: View {
                     
                     Rectangle()
                       .frame(height: 1)
-                      .foregroundStyle(Color.pink.opacity(0.15))
+                      .foregroundStyle(TLColor.borderCard.opacity(0.15))
                     
                     ScrollView {
                         LazyVStack {
@@ -68,7 +68,7 @@ struct TimelineView: View {
                                 if post.id != model.filteredPosts.last?.id {
                                     Rectangle()
                                       .frame(height: 1)
-                                      .foregroundStyle(Color.pink.opacity(0.15))
+                                      .foregroundStyle(TLColor.borderCard.opacity(0.15))
                                 }
                             }
                         }
@@ -118,7 +118,13 @@ struct TimelineView: View {
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .resizable()
-                        .foregroundStyle(Color.pink.opacity(0.7))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [TLColor.fabFrom, TLColor.fabTo],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                         .frame(width: 50, height: 50)
                         .padding(.trailing, 20)
                         .padding(.bottom)

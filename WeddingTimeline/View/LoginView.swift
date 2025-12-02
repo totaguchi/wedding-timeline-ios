@@ -15,7 +15,7 @@ struct LoginView: View {
     var body: some View {
         ZStack {
             // Background gradient + subtle decoration
-            LinearGradient(colors: [Color(.systemPink).opacity(0.2), Color(.systemPurple).opacity(0.15)],
+            LinearGradient(colors: [TLColor.btnCategorySelFrom.opacity(0.2), TLColor.icoCategoryPurple.opacity(0.15)],
                            startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
@@ -27,7 +27,7 @@ struct LoginView: View {
                             .font(.title2).bold()
                         Text("大切な瞬間をみんなでシェア")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(TLColor.textMeta)
                     }
                     .padding(.top, 24)
 
@@ -62,28 +62,28 @@ struct LoginView: View {
                                     Image(systemName: "person.crop.square.fill")
                                         .font(.system(size: 40))
                                         .frame(width: 48, height: 48)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(TLColor.textMeta)
                                 }
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(vm.selectedIcon ?? "アバター 1")
                                         .font(.subheadline).bold()
                                     Text("タップして変更")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(TLColor.textMeta)
                                 }
                                 Spacer()
                                 Image(systemName: "camera.fill")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(TLColor.textMeta)
                             }
                             .padding(12)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(Color(.systemGray6)))
+                            .background(RoundedRectangle(cornerRadius: 14).fill(TLColor.bgCard))
                         }
                         .buttonStyle(.plain)
                     }
                     .padding(20)
                     .background(
                         RoundedRectangle(cornerRadius: 24)
-                            .fill(.white)
+                            .fill(AppColor.white)
                             .shadow(color: .black.opacity(0.06), radius: 18, y: 8)
                     )
                     .padding(.horizontal)
@@ -101,22 +101,22 @@ struct LoginView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
                         .background(
-                            LinearGradient(colors: [Color.pink, Color.purple], startPoint: .leading, endPoint: .trailing)
+                            LinearGradient(colors: [TLColor.btnCategorySelFrom, TLColor.icoCategoryPurple], startPoint: .leading, endPoint: .trailing)
                         )
-                        .foregroundStyle(.white)
+                        .foregroundStyle(TLColor.btnCategorySelText)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: .pink.opacity(0.25), radius: 12, y: 8)
+                        .shadow(color: TLColor.hoverTextPink500.opacity(0.25), radius: 12, y: 8)
                     }
                     .padding(.horizontal)
                     .disabled(vm.roomId.isEmpty || vm.roomKey.isEmpty || vm.username.isEmpty || vm.isLogin || vm.selectedIcon == nil)
                     .overlay(alignment: .center) {
-                        if vm.isLogin { ProgressView().tint(.white) }
+                        if vm.isLogin { ProgressView().tint(TLColor.btnCategorySelText) }
                     }
 
                     if let msg = vm.errorMessage {
                         Text(msg)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(TLColor.textDeleteTitle)
                             .padding(.horizontal)
                     }
 
@@ -142,7 +142,7 @@ private struct FieldLabel: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: system)
-                .foregroundStyle(.pink)
+                .foregroundStyle(TLColor.icoCategoryPink)
             Text(title)
                 .font(.subheadline).bold()
         }
@@ -159,8 +159,8 @@ private struct InputField: ViewModifier {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color(.systemPink).opacity(0.25), lineWidth: 1)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemGray6)))
+                    .strokeBorder(TLColor.borderCard.opacity(0.25), lineWidth: 1)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(TLColor.bgCard))
             )
     }
 }

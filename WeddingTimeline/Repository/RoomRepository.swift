@@ -9,6 +9,7 @@ import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 
+// NOTE: username は表示名として重複許容。uniqueness ロックは使用しない。
 final class RoomRepository {
     private lazy var db: Firestore = Firestore.firestore()
     init() {}
@@ -35,57 +36,58 @@ final class RoomRepository {
         }
         guard let uid = Auth.auth().currentUser?.uid else { throw JoinError.notSignedIn }
         
-        if try await isUserAlreadyInRoom(roomId: roomIdSan, uid: uid) {
-            return
-        }
-        
-        // roomSecrets で roomKey をサーバー照会して検証（入室処理の前に実施）
+        // 既に会員かどうかを先に確認
+        let existed = try await isUserAlreadyInRoom(roomId: roomIdSan, uid: uid)
+
         let roomRef   = db.collection("rooms").document(roomIdSan)
         let secretRef = db.collection("roomSecrets").document(roomIdSan)
-        do {
-            let secretSnap = try await secretRef.getDocument(source: .server)
-            guard let secretData = secretSnap.data(),
-                  let storedKey = secretData["roomKey"] as? String else {
-                throw NSError(domain: "Auth", code: 404, userInfo: [NSLocalizedDescriptionKey: "このルームは存在しません"])
+        let memberRef = roomRef.collection("members").document(uid)
+        let usernameLower = userNameSan.lowercased()
+
+        // 未入室（create）のときのみ roomKey をサーバーで検証
+        if !existed {
+            do {
+                let secretSnap = try await secretRef.getDocument(source: .server)
+                guard let secretData = secretSnap.data(),
+                      let storedKey = secretData["roomKey"] as? String else {
+                    throw NSError(domain: "Auth", code: 404, userInfo: [NSLocalizedDescriptionKey: "このルームは存在しません"])
+                }
+                guard storedKey == roomKeySan else {
+                    throw NSError(domain: "Auth", code: 403, userInfo: [NSLocalizedDescriptionKey: "ルームキーが違います"])
+                }
+            } catch {
+                let ns = error as NSError
+                print("[RoomRepository] roomKey validation failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
+                throw error
             }
-            guard storedKey == roomKeySan else {
-                throw NSError(domain: "Auth", code: 403, userInfo: [NSLocalizedDescriptionKey: "ルームキーが違います"])
-            }
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] roomKey validation failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw error
         }
-
-        let usernameLower = userNameSan
-            .lowercased()
-
-        let usernameRef = roomRef.collection("usernames").document(usernameLower)
-        let memberRef   = roomRef.collection("members").document(uid)
 
         do {
             try await runTransactionAsync(db: db) { (txn: FirebaseFirestore.Transaction) in
-                // (1) username ロック: create を試みる（既存なら rules で update 拒否）
-                txn.setData([
-                    "uid": uid,
-                    "createdAt": FieldValue.serverTimestamp()
-                ], forDocument: usernameRef, merge: false)
-
-                // (2) members/{uid} 作成（providedKey はルールで検証）
-                var memberData: [String: Any] = [
-                    "username": userNameSan,
-                    "usernameLower": usernameLower,
-                    "role": "member",
-                    "joinedAt": FieldValue.serverTimestamp(),
-                    "isBanned": false,
-                    "mutedUntil": NSNull(),
-                    "providedKey": roomKeySan
-                ]
-            
-                memberData["userIcon"] = params.selectedIcon // 既存スキーマに合わせて保持（avatarKey を使う場合はここを変更）
-                txn.setData(memberData, forDocument: memberRef, merge: false)
-
-                // (3) memberCount はクライアントでは更新しない（集計は Cloud Functions 推奨）
+                if existed {
+                    // (1) 既存会員: 表示名/アイコン/最終サインイン時間だけ更新（providedKey は送らない）
+                    var updates: [String: Any] = [
+                        "username": userNameSan,
+                        "usernameLower": usernameLower,
+                        "lastSignedInAt": FieldValue.serverTimestamp(),
+                        "userIcon": params.selectedIcon
+                    ]
+                    txn.setData(updates, forDocument: memberRef, merge: true)
+                } else {
+                    // (1) 新規作成: providedKey を含めて create（ルールで検証）
+                    var memberData: [String: Any] = [
+                        "username": userNameSan,
+                        "usernameLower": usernameLower,
+                        "role": "member",
+                        "joinedAt": FieldValue.serverTimestamp(),
+                        "lastSignedInAt": FieldValue.serverTimestamp(),
+                        "isBanned": false,
+                        "mutedUntil": NSNull(),
+                        "providedKey": roomKeySan,
+                        "userIcon": params.selectedIcon
+                    ]
+                    txn.setData(memberData, forDocument: memberRef, merge: false)
+                }
             }
         } catch {
             let ns = error as NSError
@@ -93,10 +95,10 @@ final class RoomRepository {
             throw error
         }
 
-        // B案: 書き込み直後に providedKey を消す
-        try await db.collection("rooms").document(roomIdSan)
-            .collection("members").document(uid)
-            .updateData(["providedKey": FieldValue.delete()])
+        // create のときのみ providedKey を消す
+        if !existed {
+            try await memberRef.updateData(["providedKey": FieldValue.delete()])
+        }
     }
     
     // 3) ルーム内での username 変更
@@ -114,35 +116,10 @@ final class RoomRepository {
         let memberRef = roomRef.collection("members").document(uid)
 
         let newLower  = usernameSan.lowercased()
-        let newLock   = roomRef.collection("usernames").document(newLower)
 
         do {
             try await runTransactionAsync(db: db) { (txn: FirebaseFirestore.Transaction) in
-                // 自分の member を読み取り（これはルールで許可されている）
-                let memberSnap = try txn.getDocument(memberRef)
-                guard let member = memberSnap.data() else {
-                    throw NSError(domain: "Room", code: 404, userInfo: [NSLocalizedDescriptionKey: "メンバー情報が見つかりません"])
-                }
-
-                let oldLower = (member["usernameLower"] as? String)?.lowercased() ?? ""
-                if oldLower == newLower {
-                    // 変更なし: 何もしない
-                    return
-                }
-
-                // 新しいロックを作成（存在チェックはせず、ルール側の "!exists" で一意性を担保する）
-                txn.setData([
-                    "uid": uid,
-                    "createdAt": FieldValue.serverTimestamp()
-                ], forDocument: newLock, merge: false)
-
-                // 旧ロックを解放（read 権限は無いので存在チェックなしで delete）
-                if !oldLower.isEmpty {
-                    let oldLock = roomRef.collection("usernames").document(oldLower)
-                    txn.deleteDocument(oldLock)
-                }
-
-                // member を更新
+                // username は表示名として重複を許容するため、ロック操作は不要
                 txn.setData([
                     "username": usernameSan,
                     "usernameLower": newLower
@@ -170,12 +147,6 @@ final class RoomRepository {
             // 会員 doc
             let memberSnap = try txn.getDocument(memberRef)
             guard let member = memberSnap.data() else { return }
-
-            // username ロック解放（read 権限が無いため存在チェックは行わず、直接 delete）
-            if let lower = member["usernameLower"] as? String, !lower.isEmpty {
-                let lockRef = roomRef.collection("usernames").document(lower)
-                txn.deleteDocument(lockRef) // 既存でも未存在でも OK（delete 権限のみ評価される）
-            }
 
             // 会員 doc 削除
             txn.deleteDocument(memberRef)

@@ -24,7 +24,7 @@ struct IconPickerView: View {
                 HStack(alignment: .center) {
                     HStack(spacing: 8) {
                         Image(systemName: "photo.on.rectangle.angled")
-                            .foregroundStyle(.pink)
+                            .foregroundStyle(TLColor.icoCategoryPink)
                         Text("アバターを選択")
                             .font(.title3).bold()
                     }
@@ -34,7 +34,7 @@ struct IconPickerView: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(TLColor.textMeta)
                             .padding(8)
                             .background(.ultraThinMaterial, in: Circle())
                     }
@@ -44,7 +44,7 @@ struct IconPickerView: View {
 
                 Text("お好きなアバターを選んでください")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(TLColor.textMeta)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 ScrollView {
@@ -59,7 +59,7 @@ struct IconPickerView: View {
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 20)
-                    .fill(Color(.systemBackground))
+                    .fill(TLColor.bgCard)
                     .shadow(color: .black.opacity(0.06), radius: 16, y: 6)
             )
             .padding(.horizontal)
@@ -87,19 +87,19 @@ struct IconPickerView: View {
                     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
                     .overlay(
                         Circle()
-                            .strokeBorder(isSelected ? Color.pink : Color.white, lineWidth: 2)
+                            .strokeBorder(isSelected ? TLColor.btnCategorySelTo : AppColor.white, lineWidth: 2)
                     )
                 
                 if isSelected {
                     HStack(spacing: 6) {
-                        Image(systemName: "heart.fill").foregroundStyle(.pink)
-                        Text("選択中").font(.caption2).bold().foregroundStyle(.pink)
+                        Image(systemName: "heart.fill").foregroundStyle(TLColor.fillPink500)
+                        Text("選択中").font(.caption2).bold().foregroundStyle(TLColor.fillPink500)
                     }
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.white)
+                            .fill(AppColor.white)
                             .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
                     )
                     .padding(8)
@@ -113,7 +113,7 @@ struct IconPickerView: View {
             .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
             .overlay(
                 RoundedRectangle(cornerRadius: 18)
-                    .strokeBorder(isSelected ? Color.pink : Color.pink.opacity(0.25), lineWidth: isSelected ? 2 : 1)
+                    .strokeBorder(isSelected ? TLColor.btnCategorySelTo : TLColor.borderCard.opacity(0.25), lineWidth: isSelected ? 2 : 1)
             )
         }
         .buttonStyle(.plain)
@@ -127,5 +127,5 @@ struct IconPickerView: View {
     ]
     return IconPickerView(selectedIcon: .constant("lesser_panda"), icons: icons)
         .padding()
-        .background(LinearGradient(colors: [.pink.opacity(0.15), .purple.opacity(0.12)], startPoint: .top, endPoint: .bottom))
+        .background(LinearGradient(colors: [TLColor.btnCategorySelFrom.opacity(0.15), TLColor.icoCategoryPurple.opacity(0.12)], startPoint: .top, endPoint: .bottom))
 }

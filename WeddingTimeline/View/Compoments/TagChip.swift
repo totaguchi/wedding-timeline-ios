@@ -21,12 +21,22 @@ struct TagChip: View {
             .padding(.vertical, 10)
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
-            .background(isSelected ? Color.pink.opacity(0.15) : Color.clear)
+            .background {
+                if isSelected {
+                    LinearGradient(
+                        colors: [TLColor.btnCategorySelFrom, TLColor.btnCategorySelTo],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                } else {
+                    TLColor.btnCategoryUnselBg
+                }
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(isSelected ? Color.clear : Color.secondary.opacity(0.25), lineWidth: 1)
+                    .stroke(isSelected ? Color.clear : TLColor.btnCategoryUnselBorder, lineWidth: 1)
             )
-            .foregroundStyle(isSelected ? Color.pink : Color.primary)
+            .foregroundStyle(isSelected ? TLColor.btnCategorySelText : TLColor.btnCategoryUnselText)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)

@@ -25,12 +25,22 @@ struct CategoryFilterBar: View {
                         .font(.system(size: 14, weight: .semibold))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(isSel ? Color.pink.opacity(0.15) : Color(.systemBackground))
+                        .background {
+                            if isSel {
+                                LinearGradient(
+                                    colors: [TLColor.btnCategorySelFrom, TLColor.btnCategorySelTo],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            } else {
+                                TLColor.btnCategoryUnselBg
+                            }
+                        }
                         .overlay(
                             Capsule()
-                                .stroke(isSel ? Color.pink : Color(.separator), lineWidth: isSel ? 0 : 1)
+                                .stroke(isSel ? Color.clear : TLColor.btnCategoryUnselBorder, lineWidth: isSel ? 0 : 1)
                         )
-                        .foregroundStyle(isSel ? Color.pink : Color.primary)
+                        .foregroundStyle(isSel ? TLColor.btnCategorySelText : TLColor.btnCategoryUnselText)
                         .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)

@@ -43,7 +43,7 @@ struct FullScreenVideoView: View {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 28, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(TLColor.icoWhite)
                             .shadow(radius: 4)
                     }
                     Spacer()
@@ -52,14 +52,14 @@ struct FullScreenVideoView: View {
                     }) {
                         if isPreparingShare {
                             ProgressView()
-                                .tint(.white)
+                                .tint(TLColor.icoWhite)
                                 .padding(6)
                                 .background(Color.black.opacity(0.5))
                                 .clipShape(Circle())
                         } else {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 20, weight: .semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(TLColor.icoWhite)
                                 .padding(6)
                                 .background(Color.black.opacity(0.5))
                                 .clipShape(Circle())
@@ -73,7 +73,7 @@ struct FullScreenVideoView: View {
                     }) {
                         Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(TLColor.icoWhite)
                             .padding(6)
                             .background(Color.black.opacity(0.5))
                             .clipShape(Circle())
@@ -90,7 +90,7 @@ struct FullScreenVideoView: View {
                             Button(action: { togglePlayPause() }) {
                                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                                     .font(.system(size: 22, weight: .bold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(TLColor.icoWhite)
                                     .padding(10)
                                     .background(Color.black.opacity(0.5))
                                     .clipShape(Circle())
@@ -112,23 +112,23 @@ struct FullScreenVideoView: View {
                                     }
                                 }
                             )
-                            .tint(.white)
+                            .tint(TLColor.icoWhite)
                         }
 
                         HStack {
                             Text(formatTime(currentTimeSec))
                                 .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.white.opacity(0.9))
+                                .foregroundStyle(TLColor.icoWhite.opacity(0.9))
                             Spacer()
                             Text(formatTime(durationSec))
                                 .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.white.opacity(0.9))
+                                .foregroundStyle(TLColor.icoWhite.opacity(0.9))
                         }
 
                         if let caption, !caption.isEmpty {
                             Text(caption)
                                 .font(.callout)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(TLColor.icoWhite)
                                 .multilineTextAlignment(.leading)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .lineLimit(4)

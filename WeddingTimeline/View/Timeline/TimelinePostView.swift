@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVKit
+import CryptoKit
 
 struct TimelinePostView: View {
     let model: TimelinePost
@@ -15,6 +16,11 @@ struct TimelinePostView: View {
     @State private var galleryStartIndex = 0
     @State private var isGalleryPresented = false
     @State private var likeBusy = false
+    @Environment(Session.self) private var session
+    
+    // 表示タグ設定（常時 username の後ろに @xxxx を付ける）
+    var useRoomScopedTag: Bool = true   // true: roomId + uid のハッシュでルームごとに変化
+    var tagLength: Int = 4              // 既定は4文字（@abcd）
     
     init(model: TimelinePost, enableNavigation: Bool = true, onToggleLike: @escaping (Bool) -> Void) {
         self.model = model
@@ -32,7 +38,7 @@ struct TimelinePostView: View {
             VStack(alignment: .leading, spacing: 5) {
                 if enableNavigation {
                     NavigationLink {
-                        PostDetailView(model: model)
+                        PostDetailView(model: model, onToggleLike: onToggleLike)
                     } label: {
                         headerAndContent
                             .contentShape(Rectangle())
@@ -85,8 +91,9 @@ struct TimelinePostView: View {
                         HStack(spacing: 4) {
                             Image(systemName: model.isLiked ? "heart.fill" : "heart")
                                 .symbolRenderingMode(.hierarchical)
-                                .foregroundStyle(model.isLiked ? .red : .primary)
+                                .foregroundStyle(model.isLiked ? TLColor.fillPink500 : TLColor.icoAction)
                             Text("\(model.likeCount)")
+                                .foregroundStyle(TLColor.textMeta)
                         }
                     }
                     .buttonStyle(.plain)
@@ -102,10 +109,16 @@ struct TimelinePostView: View {
     private var headerAndContent: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text(model.userName)
-                    .font(.subheadline)
-                Text(model.createdAt.description)
+                let tag = displayTag(for: model, roomId: session.currentRoomId)
+                HStack(spacing: 0) {
+                    Text(model.userName)
+                        .font(.subheadline).fontWeight(.semibold)
+                        .foregroundStyle(TLColor.textAuthor)
+                    Text(" \(tag)").font(.caption).foregroundStyle(TLColor.textMeta)
+                }
+                Text(DateFormatter.appCreatedAt.string(from: model.createdAt))
                     .font(.caption)
+                    .foregroundStyle(TLColor.textMeta)
                 Spacer()
             }
             if model.tag != .unknown {
@@ -113,6 +126,7 @@ struct TimelinePostView: View {
             }
             Text(model.content)
                 .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(TLColor.textBody)
         }
     }
 
@@ -120,31 +134,41 @@ struct TimelinePostView: View {
     private var tagChip: some View {
         switch model.tag {
         case .ceremony:
-            TagPill(systemName: "heart", text: "挙式", tint: .pink)
+            TagPill(tag: .ceremony)
         case .reception:
-            TagPill(systemName: "fork.knife", text: "披露宴", tint: Color.purple)
+            TagPill(tag: .reception)
         default:
             EmptyView()
         }
     }
 
     private struct TagPill: View {
-        let systemName: String
-        let text: String
-        let tint: Color
+        let tag: PostTag
         var body: some View {
+            let isCeremony = tag == .ceremony
+            let bgColor = isCeremony ? TLColor.badgeCeremonyBg : TLColor.badgeReceptionBg
+            let textColor = isCeremony ? TLColor.badgeCeremonyText : TLColor.badgeReceptionText
+            let borderColor = isCeremony ? TLColor.borderBadgeCeremony : TLColor.borderBadgeReception
             HStack(spacing: 6) {
-                Image(systemName: systemName)
-                Text(text)
+                Image(systemName: tag.icon)
+                Text(tag.displayName)
                     .font(.caption)
                     .fontWeight(.semibold)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .background(tint.opacity(0.12))
-            .foregroundStyle(tint)
+            .background(bgColor)
+            .foregroundStyle(textColor)
+            .overlay(
+                Capsule().stroke(borderColor, lineWidth: 1)
+            )
             .clipShape(Capsule())
         }
+    }
+        
+    /// 投稿モデル用のタグ生成（ビューから呼びやすいヘルパー）
+    func displayTag(for post: TimelinePost, roomId: String) -> String {
+        DisplayTag.make(roomId: roomId, uid: post.authorId)
     }
 }
 

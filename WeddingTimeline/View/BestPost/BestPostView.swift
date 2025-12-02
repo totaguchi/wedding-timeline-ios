@@ -24,11 +24,11 @@ struct BestPostView: View {
                     skeletonCard(rank: 3)
                 } else if !vm.errorMessage.isNilOrEmpty {
                     Text(vm.errorMessage ?? "")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(TLColor.textMeta)
                         .padding(.top, 24)
                 } else {
                     ForEach(vm.top3.indices, id: \.self) { i in
-                        RankCard(model: vm.top3[i], rank: i + 1)
+                        RankCard(model: vm.top3[i], rank: i + 1, roomId: session.currentRoomId)
                             .padding(.horizontal, 16)
                     }
                 }
@@ -48,14 +48,14 @@ struct BestPostView: View {
         VStack(spacing: 8) {
             Text("🎉 人気の投稿 🎉")
                 .font(.title3).bold()
-                .foregroundStyle(Color.pink)
+                .foregroundStyle(TLColor.icoCategoryPink)
             Text("みんなに愛されている投稿です")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TLColor.textMeta)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
-        .background(Color.pink.opacity(0.08))
+        .background(TLColor.hoverBgPink50)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .padding(.horizontal, 16)
     }
@@ -106,11 +106,21 @@ private struct FilterChip: View {
             .font(.system(size: 14, weight: .semibold))
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(isSelected ? Color.pink.opacity(0.15) : Color(.systemBackground))
+            .background {
+                if isSelected {
+                    LinearGradient(
+                        colors: [TLColor.btnCategorySelFrom, TLColor.btnCategorySelTo],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                } else {
+                    TLColor.btnCategoryUnselBg
+                }
+            }
             .overlay(
-                Capsule().stroke(isSelected ? .clear : Color.secondary.opacity(0.2), lineWidth: 1)
+                Capsule().stroke(isSelected ? .clear : TLColor.btnCategoryUnselBorder, lineWidth: 1)
             )
-            .foregroundStyle(isSelected ? Color.pink : Color.primary)
+            .foregroundStyle(isSelected ? TLColor.btnCategorySelText : TLColor.btnCategoryUnselText)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -120,6 +130,7 @@ private struct FilterChip: View {
 private struct RankCard: View {
     let model: TimelinePost
     let rank: Int
+    let roomId: String
 
     @State private var galleryStartIndex = 0
     @State private var isGalleryPresented = false
@@ -143,8 +154,15 @@ private struct RankCard: View {
                     AvatarView(userIcon: model.userIcon)
                         .frame(width: 44, height: 44)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(model.userName).font(.headline)
-                        // ここに @handle / 時刻 等を足したければ追加
+                        let tag = DisplayTag.make(roomId: roomId, uid: model.authorId)
+                        HStack(spacing: 0) {
+                            Text(model.userName)
+                                .font(.headline)
+                                .foregroundStyle(TLColor.textAuthor)
+                            Text(" \(tag)").font(.caption).foregroundStyle(TLColor.textMeta)
+                        }
+                        Text(DateFormatter.appCreatedAt.string(from: model.createdAt))
+                            .foregroundStyle(TLColor.textMeta)
                     }
                     Spacer()
                 }
@@ -156,6 +174,7 @@ private struct RankCard: View {
                 Text(model.content)
                     .font(.body)
                     .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(TLColor.textBody)
 
                 if let mediaType = model.media.first?.type, mediaType != .unknown {
                     // 画像URL配列と動画URLを抽出
@@ -182,16 +201,17 @@ private struct RankCard: View {
                 }
 
                 HStack(spacing: 20) {
-                    Label("\(model.likeCount)", systemImage: "heart")
-                    Label("\(model.replyCount)", systemImage: "bubble.left")
+                    Label("\(model.likeCount)", systemImage: "heart.fill")
+                        .foregroundStyle(TLColor.fillPink500)
+                    // TODO: コメント機能は未実装
+                    // Label("\(model.replyCount)", systemImage: "bubble.left")
                 }
-                .foregroundStyle(.secondary)
                 .font(.subheadline)
             }
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(.secondarySystemBackground))
+                    .fill(TLColor.bgCard)
                     .shadow(color: .black.opacity(0.06), radius: 8, y: 4)
             )
             .overlay(
@@ -226,8 +246,11 @@ private struct RankCard: View {
         .font(.caption)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background((model.tag == .ceremony ? Color.pink : Color.purple).opacity(0.12))
-        .foregroundStyle(model.tag == .ceremony ? Color.pink : Color.purple)
+        .background(model.tag == .ceremony ? TLColor.badgeCeremonyBg : TLColor.badgeReceptionBg)
+        .foregroundStyle(model.tag == .ceremony ? TLColor.badgeCeremonyText : TLColor.badgeReceptionText)
+        .overlay(
+            Capsule().stroke(model.tag == .ceremony ? TLColor.borderBadgeCeremony : TLColor.borderBadgeReception, lineWidth: 1)
+        )
         .clipShape(Capsule())
     }
 }
@@ -237,15 +260,15 @@ private struct RankCardSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 22).fill(.gray.opacity(0.25)).frame(width: 44, height: 44)
+                RoundedRectangle(cornerRadius: 22).fill(AppColor.gray400.opacity(0.25)).frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 8) {
-                    RoundedRectangle(cornerRadius: 4).fill(.gray.opacity(0.25)).frame(width: 120, height: 12)
-                    RoundedRectangle(cornerRadius: 4).fill(.gray.opacity(0.2)).frame(width: 80, height: 10)
+                    RoundedRectangle(cornerRadius: 4).fill(AppColor.gray400.opacity(0.25)).frame(width: 120, height: 12)
+                    RoundedRectangle(cornerRadius: 4).fill(AppColor.gray400.opacity(0.2)).frame(width: 80, height: 10)
                 }
             }
-            RoundedRectangle(cornerRadius: 4).fill(.gray.opacity(0.2)).frame(height: 12)
-            RoundedRectangle(cornerRadius: 4).fill(.gray.opacity(0.2)).frame(height: 12)
-            HStack { RoundedRectangle(cornerRadius: 4).fill(.gray.opacity(0.2)).frame(width: 80, height: 10); Spacer() }
+            RoundedRectangle(cornerRadius: 4).fill(AppColor.gray400.opacity(0.2)).frame(height: 12)
+            RoundedRectangle(cornerRadius: 4).fill(AppColor.gray400.opacity(0.2)).frame(height: 12)
+            HStack { RoundedRectangle(cornerRadius: 4).fill(AppColor.gray400.opacity(0.2)).frame(width: 80, height: 10); Spacer() }
         }
         .padding(16)
         .background(
@@ -265,7 +288,7 @@ private struct AvatarView: View {
             AsyncImage(url: url) { img in
                 img.resizable().scaledToFill()
             } placeholder: {
-                Circle().fill(.gray.opacity(0.2))
+                Circle().fill(AppColor.gray400.opacity(0.2))
             }
             .clipShape(Circle())
         } else {

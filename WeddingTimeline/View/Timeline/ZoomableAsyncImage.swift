@@ -86,7 +86,7 @@ struct ZoomableAsyncImage: View {
                     Image(systemName: "photo")
                         .resizable()
                         .scaledToFit()
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(TLColor.icoAction)
                         .frame(width: geo.size.width, height: geo.size.height)
                 @unknown default:
                     EmptyView()

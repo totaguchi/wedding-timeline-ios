@@ -48,7 +48,7 @@ struct SettingView: View {
 
                     Text("Version \(appVersion)")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(TLColor.textMeta)
                         .padding(.bottom, 24)
                 }
                 .padding(.horizontal, 16)
@@ -81,9 +81,23 @@ private extension SettingView {
                 .frame(width: 64, height: 64)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(session.cachedMember?.username ?? "未設定")
-                    .font(.title3.bold())
-                    .foregroundStyle(.primary)
+                if let uid = session.cachedMember?.uid,
+                   let username = session.cachedMember?.username {
+                    let tag = DisplayTag.make(roomId: session.currentRoomId, uid: uid)
+                    HStack(spacing: 0) {
+                        Text(username)
+                            .font(.title3.bold())
+                            .foregroundStyle(TLColor.textAuthor)
+                        Text(" \(tag)").font(.caption).foregroundStyle(TLColor.textMeta)
+                    }
+                } else {
+                    Text("未設定")
+                        .font(.title3.bold())
+                        .foregroundStyle(TLColor.textBody)
+                    
+                }
+                    
+                    
                 Spacer()
             }
             Spacer()
@@ -93,14 +107,14 @@ private extension SettingView {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
                     LinearGradient(
-                        colors: [Color.pink.opacity(0.22), Color.purple.opacity(0.18)],
+                        colors: [TLColor.btnCategorySelFrom.opacity(0.22), TLColor.icoCategoryPurple.opacity(0.18)],
                         startPoint: .topLeading, endPoint: .bottomTrailing
                     )
                 )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.pink.opacity(0.12), lineWidth: 1)
+                .strokeBorder(TLColor.borderCard.opacity(0.12), lineWidth: 1)
         )
     }
 
@@ -129,15 +143,15 @@ private extension SettingView {
                 Text("ログアウト")
                     .font(.headline)
             }
-            .foregroundStyle(Color.pink)
+            .foregroundStyle(TLColor.fillPink500)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.pink.opacity(0.35), lineWidth: 1)
+                    .stroke(TLColor.btnCategorySelFrom.opacity(0.35), lineWidth: 1)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.pink.opacity(0.07))
+                            .fill(TLColor.btnCategorySelFrom.opacity(0.07))
                     )
             )
         }
@@ -158,19 +172,19 @@ private struct SettingRow: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.pink.opacity(0.12))
+                        .fill(TLColor.btnCategorySelFrom.opacity(0.12))
                         .frame(width: 36, height: 36)
                     Image(systemName: icon)
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Color.pink)
+                        .foregroundStyle(TLColor.icoCategoryPink)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(TLColor.textBody)
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(TLColor.textMeta)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -191,15 +205,15 @@ private struct AvatarView: View {
             if let icon = userIcon {
                 Image(icon)
                     .resizable().scaledToFill()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(TLColor.textMeta)
             } else {
                 Image(systemName: "person.crop.circle.fill")
                     .resizable().scaledToFill()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(TLColor.textMeta)
             }
         }
         .clipShape(Circle())
-        .overlay(Circle().stroke(Color.white.opacity(0.9), lineWidth: 2))
+        .overlay(Circle().stroke(AppColor.white.opacity(0.9), lineWidth: 2))
         .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
     }
 }
@@ -211,9 +225,9 @@ private struct PlaceholderSheet: View {
             VStack(spacing: 12) {
                 Image(systemName: "hammer")
                     .font(.system(size: 32))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(TLColor.textMeta)
                 Text("\(title) は準備中です")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(TLColor.textMeta)
             }
             .padding()
             .navigationTitle(title)
