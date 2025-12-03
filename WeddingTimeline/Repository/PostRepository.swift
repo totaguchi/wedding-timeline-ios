@@ -310,9 +310,6 @@ final class PostRepository {
         let tagSan = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         // バリデーション
-        guard !contentSan.isEmpty else {
-            throw NSError(domain: "PostRepository", code: 400, userInfo: [NSLocalizedDescriptionKey: "本文を入力してください"])
-        }
         guard !roomIdSan.isEmpty else {
             throw NSError(domain: "PostRepository", code: 400, userInfo: [NSLocalizedDescriptionKey: "ルーム情報が取得できませんでした"])
         }

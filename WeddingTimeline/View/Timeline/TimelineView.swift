@@ -93,6 +93,15 @@ struct TimelineView: View {
                     }
                 }
             }
+            .fullScreenCover(isPresented: $isShowingCreateView, onDismiss: {
+                // Sheet dismissed -> scroll to top
+                withAnimation {
+                    proxy.scrollTo("tl-top", anchor: .top)
+                }
+            }) {
+                PostCreateView(roomId: session.currentRoomId)
+                    .toolbar(.hidden, for: .tabBar) // Hide tab bar while the full-screen cover is shown
+            }
         }
         .refreshable {
             await model.refreshHead(roomId: session.currentRoomId)
@@ -130,10 +139,6 @@ struct TimelineView: View {
                         .padding(.bottom)
                 }
             }
-        }
-        .fullScreenCover(isPresented: $isShowingCreateView) {
-            PostCreateView(roomId: session.currentRoomId)
-                .toolbar(.hidden, for: .tabBar) // Hide tab bar while the full-screen cover is shown
         }
         .toolbar(isShowingCreateView ? .hidden : .visible, for: .tabBar)
         // Top-of-list detection updates VM state
