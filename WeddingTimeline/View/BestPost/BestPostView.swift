@@ -11,6 +11,11 @@ import AVKit
 struct BestPostView: View {
     @Environment(Session.self) private var session
     @State private var vm = BestPostViewModel()
+    
+    private var activeRoomId: String? {
+        let id = session.currentRoomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return id.isEmpty ? nil : id
+    }
 
     var body: some View {
         ScrollView {
@@ -27,20 +32,31 @@ struct BestPostView: View {
                         .foregroundStyle(TLColor.textMeta)
                         .padding(.top, 24)
                 } else {
-                    ForEach(vm.top3.indices, id: \.self) { i in
-                        RankCard(model: vm.top3[i], rank: i + 1, roomId: session.currentRoomId)
-                            .padding(.horizontal, 16)
+                    if let roomId = activeRoomId {
+                        ForEach(vm.top3.indices, id: \.self) { i in
+                            RankCard(model: vm.top3[i], rank: i + 1, roomId: roomId)
+                                .padding(.horizontal, 16)
+                        }
                     }
                 }
             }
             .padding(.vertical, 16)
         }
         .navigationTitle("ベストポスト")
-        .task { await vm.loadTop3(roomId: session.currentRoomId) }
+        .task { await loadTop3IfNeeded() }
         .onChange(of: vm.selectedTag) { _, _ in
-            Task { await vm.loadTop3(roomId: session.currentRoomId) }
+            Task { await loadTop3IfNeeded() }
         }
-        .refreshable { await vm.loadTop3(roomId: session.currentRoomId) }
+        .onChange(of: session.currentRoomId) { _, newRoomId in
+            let trimmed = newRoomId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                vm.top3 = []
+                vm.errorMessage = nil
+            } else {
+                Task { await loadTop3IfNeeded() }
+            }
+        }
+        .refreshable { await loadTop3IfNeeded() }
     }
 
     // MARK: - Header
@@ -88,6 +104,11 @@ struct BestPostView: View {
     private func skeletonCard(rank: Int) -> some View {
         RankCardSkeleton(rank: rank)
             .padding(.horizontal, 16)
+    }
+    
+    private func loadTop3IfNeeded() async {
+        guard let roomId = activeRoomId else { return }
+        await vm.loadTop3(roomId: roomId)
     }
 }
 

@@ -22,6 +22,11 @@ struct TimelineView: View {
     @State private var isShowingCreateView = false
     @State private var prefetcher = ImagePrefetcher()
     
+    private var activeRoomId: String? {
+        let id = session.currentRoomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return id.isEmpty ? nil : id
+    }
+    
     var body: some View {
         ScrollViewReader { proxy in
             NavigationStack {
@@ -49,14 +54,16 @@ struct TimelineView: View {
                             ForEach(model.filteredPosts, id: \.id) { post in
                                 TimelinePostView(
                                     model: post) { isLiked in
+                                        guard let roomId = activeRoomId else { return }
                                         Task {
-                                            await model.toggleLike(model: post, roomId: session.currentRoomId, isLiked: isLiked)
+                                            await model.toggleLike(model: post, roomId: roomId, isLiked: isLiked)
                                         }
                                     }
                                     .padding(.horizontal, 10)
                                     .onAppear {
                                         if post.id == model.posts.last?.id {
-                                            Task { await model.fetchPosts(roomId: session.currentRoomId) }
+                                            guard let roomId = activeRoomId else { return }
+                                            Task { await model.fetchPosts(roomId: roomId) }
                                         }
                                         // Preheat images for upcoming posts
                                         preheatAround(postId: post.id, ahead: 12)
@@ -99,18 +106,22 @@ struct TimelineView: View {
                     proxy.scrollTo("tl-top", anchor: .top)
                 }
             }) {
-                PostCreateView(roomId: session.currentRoomId)
-                    .toolbar(.hidden, for: .tabBar) // Hide tab bar while the full-screen cover is shown
+                if let roomId = activeRoomId {
+                    PostCreateView(roomId: roomId)
+                        .toolbar(.hidden, for: .tabBar) // Hide tab bar while the full-screen cover is shown
+                }
             }
         }
         .refreshable {
-            await model.refreshHead(roomId: session.currentRoomId)
+            guard let roomId = activeRoomId else { return }
+            await model.refreshHead(roomId: roomId)
         }
         // 画面表示で購読開始
         .onAppear {
+            guard let roomId = activeRoomId else { return }
             Task {
-                await model.fetchPosts(roomId: session.currentRoomId, reset: true)
-                model.startListening(roomId: session.currentRoomId)
+                await model.fetchPosts(roomId: roomId, reset: true)
+                model.startListening(roomId: roomId)
             }
         }
         // 画面離脱で購読停止
@@ -121,7 +132,7 @@ struct TimelineView: View {
             preheatInitialWindow()
         }
         .overlay(alignment: .bottomTrailing) {
-            if !isShowingCreateView {
+            if !isShowingCreateView, activeRoomId != nil {
                 Button {
                     isShowingCreateView = true
                 } label: {
