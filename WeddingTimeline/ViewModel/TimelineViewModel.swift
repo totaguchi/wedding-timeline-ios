@@ -219,6 +219,25 @@ class TimelineViewModel {
         }
     }
     
+    
+    @MainActor
+    func deletePost(roomId: String, postId: String) async -> Bool {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("[Delete] not signed in")
+            return false
+        }
+        do {
+            try await postRepo.deletePost(roomId: roomId, postId: postId, authorUid: uid)
+            if let idx = posts.firstIndex(where: { $0.id == postId }) {
+                posts.remove(at: idx)
+            }
+            return true
+        } catch {
+            print("[Delete] failed:", error)
+            return false
+        }
+    }
+    
     private func matchesFilter(_ post: TimelinePost, _ filter: TimelineFilter) -> Bool {
         switch filter {
         case .all:       return true

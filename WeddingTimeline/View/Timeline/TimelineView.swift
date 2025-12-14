@@ -34,8 +34,8 @@ struct TimelineView: View {
                     CategoryFilterBar(vm: model)
                     
                     Rectangle()
-                      .frame(height: 1)
-                      .foregroundStyle(TLColor.borderCard.opacity(0.15))
+                        .frame(height: 1)
+                        .foregroundStyle(TLColor.borderCard.opacity(0.15))
                     
                     ScrollView {
                         LazyVStack {
@@ -53,29 +53,34 @@ struct TimelineView: View {
                                 )
                             ForEach(model.filteredPosts, id: \.id) { post in
                                 TimelinePostView(
-                                    model: post) { isLiked in
+                                    model: post
+                                ) { isLiked in
+                                    guard let roomId = activeRoomId else { return }
+                                    Task {
+                                        await model.toggleLike(model: post, roomId: roomId, isLiked: isLiked)
+                                    }
+                                } onPostDelete: { postId in
+                                    let roomId = await MainActor.run { activeRoomId }
+                                    guard let roomId else { return false }
+                                    return await model.deletePost(roomId: roomId, postId: postId)
+                                }
+                                .padding(.horizontal, 10)
+                                .onAppear {
+                                    if post.id == model.posts.last?.id {
                                         guard let roomId = activeRoomId else { return }
-                                        Task {
-                                            await model.toggleLike(model: post, roomId: roomId, isLiked: isLiked)
-                                        }
+                                        Task { await model.fetchPosts(roomId: roomId) }
                                     }
-                                    .padding(.horizontal, 10)
-                                    .onAppear {
-                                        if post.id == model.posts.last?.id {
-                                            guard let roomId = activeRoomId else { return }
-                                            Task { await model.fetchPosts(roomId: roomId) }
-                                        }
-                                        // Preheat images for upcoming posts
-                                        preheatAround(postId: post.id, ahead: 12)
-                                    }
-                                    .onDisappear {
-                                        // Cancel preheating around posts that scrolled far away
-                                        cancelPreheatAround(postId: post.id, ahead: 20)
-                                    }
+                                    // Preheat images for upcoming posts
+                                    preheatAround(postId: post.id, ahead: 12)
+                                }
+                                .onDisappear {
+                                    // Cancel preheating around posts that scrolled far away
+                                    cancelPreheatAround(postId: post.id, ahead: 20)
+                                }
                                 if post.id != model.filteredPosts.last?.id {
                                     Rectangle()
-                                      .frame(height: 1)
-                                      .foregroundStyle(TLColor.borderCard.opacity(0.15))
+                                        .frame(height: 1)
+                                        .foregroundStyle(TLColor.borderCard.opacity(0.15))
                                 }
                             }
                         }
@@ -167,7 +172,7 @@ struct TimelineView: View {
         guard !urls.isEmpty else { return }
         prefetcher.startPrefetching(with: urls)
     }
-
+    
     private func preheatAround(postId: String, ahead: Int) {
         guard let idx = model.filteredPosts.firstIndex(where: { $0.id == postId }) else { return }
         let start = idx
@@ -177,7 +182,7 @@ struct TimelineView: View {
         guard !urls.isEmpty else { return }
         prefetcher.startPrefetching(with: urls)
     }
-
+    
     private func cancelPreheatAround(postId: String, ahead: Int) {
         guard let idx = model.filteredPosts.firstIndex(where: { $0.id == postId }) else { return }
         let start = max(0, idx - ahead)
@@ -187,7 +192,7 @@ struct TimelineView: View {
         guard !urls.isEmpty else { return }
         prefetcher.stopPrefetching(with: urls)
     }
-
+    
     private func collectImageURLs(in range: ClosedRange<Int>) -> [URL] {
         var out: [URL] = []
         out.reserveCapacity((range.upperBound - range.lowerBound + 1) * 2)

@@ -13,6 +13,7 @@ struct TimelinePostView: View {
     let model: TimelinePost
     let enableNavigation: Bool
     let onToggleLike: (Bool) -> Void
+    let onPostDelete: (@Sendable (String) async -> Bool)
     @State private var galleryStartIndex = 0
     @State private var isGalleryPresented = false
     @State private var likeBusy = false
@@ -22,10 +23,11 @@ struct TimelinePostView: View {
     var useRoomScopedTag: Bool = true   // true: roomId + uid のハッシュでルームごとに変化
     var tagLength: Int = 4              // 既定は4文字（@abcd）
     
-    init(model: TimelinePost, enableNavigation: Bool = true, onToggleLike: @escaping (Bool) -> Void) {
+    init(model: TimelinePost, enableNavigation: Bool = true, onToggleLike: @escaping (Bool) -> Void, onPostDelete: @escaping (@Sendable (String) async -> Bool)) {
         self.model = model
         self.enableNavigation = enableNavigation
         self.onToggleLike = onToggleLike
+        self.onPostDelete = onPostDelete
     }
     
     var body: some View {
@@ -38,7 +40,7 @@ struct TimelinePostView: View {
             VStack(alignment: .leading, spacing: 5) {
                 if enableNavigation {
                     NavigationLink {
-                        PostDetailView(model: model, onToggleLike: onToggleLike)
+                        PostDetailView(model: model, onToggleLike: onToggleLike, onPostDelete: onPostDelete)
                     } label: {
                         headerAndContent
                             .contentShape(Rectangle())
@@ -199,7 +201,7 @@ struct TimelinePostView: View {
                     isLiked: false,
                     tag: .ceremony
                 ),
-                onToggleLike: { _ in }
+                onToggleLike: { _ in }, onPostDelete: { _ in false }
             )
             .padding()
         }
@@ -249,7 +251,7 @@ struct TimelinePostView: View {
                     isLiked: true,
                     tag: .reception
                 ),
-                onToggleLike: { _ in }
+                onToggleLike: { _ in }, onPostDelete: { _ in false }
             )
             .padding()
         }

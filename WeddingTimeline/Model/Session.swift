@@ -152,6 +152,37 @@ final class Session {
         currentRoomId = ""
         cachedMember = nil
     }
+    
+    @MainActor
+    func deleteAccount() async throws {
+        // 現在のルームが必須（このアプリはルーム単位でデータを持つため）
+        let roomIdSan = currentRoomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !roomIdSan.isEmpty else {
+            throw NSError(domain: "Session", code: 400, userInfo: [NSLocalizedDescriptionKey: "削除対象のルームが見つかりません"])
+        }
+
+        // 1) ルーム内の自分の痕跡を削除（likes / userLikes / 自分の投稿 / members）
+        try await roomRepo.deleteMyAccount(in: roomIdSan)
+
+        // 2) Firebase Auth のユーザー削除（匿名含む）。失敗時は SignOut フォールバック。
+        if let user = Auth.auth().currentUser {
+            do {
+                try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                    user.delete { err in
+                        if let err { cont.resume(throwing: err) } else { cont.resume(returning: ()) }
+                    }
+                }
+            } catch {
+                // recent login 要求などで失敗する場合はサインアウトのみ実施
+                do { try Auth.auth().signOut() } catch { /* ignore */ }
+            }
+        }
+
+        // 3) ローカル状態をクリア
+        isLoggedIn = false
+        currentRoomId = ""
+        cachedMember = nil
+    }
 
     // MARK: - Auth ensure (anonymous OK)
     private func ensureSignedInUID() async throws -> String {

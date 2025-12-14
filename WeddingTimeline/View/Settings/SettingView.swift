@@ -18,6 +18,9 @@ struct SettingView: View {
     @State private var showTheme = false
     @State private var showAbout = false
     @State private var showLogoutAlert = false
+    @State private var showDeleteAlert = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
 
     var body: some View {
         NavigationStack {
@@ -46,6 +49,9 @@ struct SettingView: View {
                     logoutButton
                         .padding(.top, 8)
 
+                    deleteAccountButton
+                        .padding(.top, 4)
+
                     Text("Version \(appVersion)")
                         .font(.footnote)
                         .foregroundStyle(TLColor.textMeta)
@@ -69,12 +75,72 @@ struct SettingView: View {
             } message: {
                 Text("ロームからログアウトします。よろしいですか？")
             }
+            .alert("アカウントを削除しますか？", isPresented: $showDeleteAlert) {
+                Button("キャンセル", role: .cancel) { }
+                Button("削除する", role: .destructive) {
+                    Task {
+                        await performAccountDeletion()
+                    }
+                }
+            } message: {
+                Text("あなたの投稿・プロフィール・いいね等の関連データが削除され、復元できません。よろしいですか？")
+            }
+            .alert("削除に失敗しました", isPresented: .init(
+                get: { deleteError != nil },
+                set: { if !$0 { deleteError = nil } }
+            )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(deleteError ?? "不明なエラー")
+            }
+            .overlay {
+                if isDeleting {
+                    ZStack {
+                        Color.black.opacity(0.2).ignoresSafeArea()
+                        VStack(spacing: 12) {
+                            ProgressView()
+                            Text("削除しています…").font(.footnote).foregroundStyle(.secondary)
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(.regularMaterial)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 // MARK: - Subviews
 private extension SettingView {
+    var deleteAccountButton: some View {
+        Button {
+            showDeleteAlert = true
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "person.crop.circle.badge.xmark")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("アカウント削除")
+                    .font(.headline)
+            }
+            .foregroundStyle(TLColor.textDeleteTitle)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(TLColor.textDeleteTitle.opacity(0.35), lineWidth: 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(TLColor.textDeleteTitle.opacity(0.07))
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+    }
+
     var profileHeader: some View {
         HStack(spacing: 16) {
             AvatarView(userIcon: session.cachedMember?.userIcon)
@@ -240,6 +306,18 @@ private extension SettingView {
     var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
         return "\(v)"
+    }
+
+    @MainActor
+    func performAccountDeletion() async {
+        isDeleting = true
+        defer { isDeleting = false }
+        do {
+            // 実運用では Session 側で Firestore/Storage のユーザーデータ削除を実装してください。
+            try await session.deleteAccount()
+        } catch {
+            deleteError = error.localizedDescription
+        }
     }
 }
 

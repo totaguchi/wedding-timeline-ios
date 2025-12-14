@@ -153,6 +153,100 @@ final class RoomRepository {
         }
     }
     
+    // 5) アカウント削除（指定ルーム内の自分の痕跡を削除：likes / userLikes / 自分の投稿 / members）
+    /// Firestore 側のみ削除します（Storage のメディア削除は別サービスで対応してください）
+    func deleteMyAccount(in roomId: String) async throws {
+        guard let uid = Auth.auth().currentUser?.uid else { throw JoinError.notSignedIn }
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let roomRef = db.collection("rooms").document(roomIdSan)
+
+        // 1) /rooms/{roomId}/userLikes/{uid}/posts/* を削除
+        do {
+            let userLikesPosts = roomRef
+                .collection("userLikes")
+                .document(uid)
+                .collection("posts")
+            try await batchDelete(query: userLikesPosts)
+        } catch {
+            let ns = error as NSError
+            print("[RoomRepository] deleteMyAccount userLikes cleanup failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
+            throw error
+        }
+
+        // 2) collectionGroup("likes") から自分の like を当該ルーム分だけ削除
+        //    （要インデックス： userId / roomId / __name__）
+        do {
+            let likesGroup = db.collectionGroup("likes")
+                .whereField("userId", isEqualTo: uid)
+                .whereField("roomId", isEqualTo: roomIdSan)
+            try await batchDelete(query: likesGroup)
+        } catch {
+            let ns = error as NSError
+            print("[RoomRepository] deleteMyAccount likes cleanup failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
+            throw error
+        }
+
+        // 3) 自分が author の投稿を削除（各投稿の likes サブコレクションを先に削除）
+        do {
+            var last: DocumentSnapshot?
+            while true {
+                var q = roomRef.collection("posts")
+                    .whereField("authorId", isEqualTo: uid)
+                    .order(by: FieldPath.documentID())
+                    .limit(to: 200)
+                if let last { q = q.start(afterDocument: last) }
+                let snap = try await q.getDocuments(source: .server)
+                if snap.documents.isEmpty { break }
+
+                // 各ポストの likes をクリア → 本体をまとめて削除
+                let batch = db.batch()
+                for doc in snap.documents {
+                    let postRef = doc.reference
+                    // サブコレ likes を全削除
+                    let likes = postRef.collection("likes")
+                    try await batchDelete(query: likes)
+                    // 本体削除
+                    batch.deleteDocument(postRef)
+                }
+                try await batch.commit()
+                last = snap.documents.last
+            }
+        } catch {
+            let ns = error as NSError
+            print("[RoomRepository] deleteMyAccount authored posts cleanup failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
+            throw error
+        }
+
+        // 4) members/{uid} を削除（最終）
+        do {
+            let memberRef = roomRef.collection("members").document(uid)
+            try await memberRef.delete()
+        } catch {
+            let ns = error as NSError
+            print("[RoomRepository] deleteMyAccount member delete failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
+            throw error
+        }
+    }
+
+    // MARK: - Helpers
+    /// 指定クエリの結果をページングしながら一括削除（__name__ でソート → start(after:)）
+    private func batchDelete(query base: Query, pageSize: Int = 300) async throws {
+        var last: DocumentSnapshot? = nil
+        while true {
+            var q = base.order(by: FieldPath.documentID()).limit(to: pageSize)
+            if let last { q = q.start(afterDocument: last) }
+            let snap = try await q.getDocuments(source: .server)
+            if snap.documents.isEmpty { break }
+            let batch = db.batch()
+            for d in snap.documents {
+                batch.deleteDocument(d.reference)
+            }
+            try await batch.commit()
+            last = snap.documents.last
+        }
+    }
+
+    
     /// 指定したルームにすでに入室済みかを確認する
     func isUserAlreadyInRoom(roomId: String, uid: String) async throws -> Bool {
         let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)

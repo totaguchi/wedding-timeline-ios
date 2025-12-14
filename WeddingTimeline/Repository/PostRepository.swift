@@ -348,4 +348,75 @@ final class PostRepository {
         let docRef = db.collection("rooms").document(roomIdSan).collection("posts").document(postId)
         try await docRef.setData(payload)
     }
+    
+    // MARK: - Report (UGC)
+    /// ユーザー通報を Firestore に保存します（1ユーザー1通報：reports/{uid} へアップサート）
+    /// パス: rooms/{roomId}/posts/{postId}/reports/{uid}
+    func reportPost(roomId: String, postId: String, reason: String, reporterUid: String) async throws {
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!roomIdSan.isEmpty, "roomId is empty")
+
+        let reportRef = db
+            .collection("rooms").document(roomIdSan)
+            .collection("posts").document(postId)
+            .collection("reports").document(reporterUid)
+
+        // まず update（存在時）を試し、NotFound の場合のみ set で新規作成。
+        do {
+            try await reportRef.updateData([
+                "reason": reason,
+                "updatedAt": FieldValue.serverTimestamp()
+            ])
+        } catch let nsError as NSError {
+            // NotFound（= ドキュメント未作成）だけフォールバック
+            if let code = FirestoreErrorCode.Code(rawValue: nsError.code), code == .notFound {
+                try await reportRef.setData([
+                    "reason": reason,
+                    "reporterUid": reporterUid,
+                    "roomId": roomIdSan,
+                    "postId": postId,
+                    "createdAt": FieldValue.serverTimestamp(),
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], merge: true)
+            } else {
+                throw nsError
+            }
+        }
+    }
+
+    // MARK: - Delete Post
+    /// 指定ポストを削除（先に likes サブコレクションを全削除 → 本体削除）
+    /// - Note: Firestore ルールで `request.auth.uid == resource.data.authorId` による削除制限を前提
+    func deletePost(roomId: String, postId: String, authorUid: String) async throws {
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let roomRef = db.collection("rooms").document(roomIdSan)
+        let postRef = roomRef.collection("posts").document(postId)
+
+        // likes サブコレクションを全削除
+        let likesQuery = postRef.collection("likes")
+        try await batchDelete(query: likesQuery)
+
+        // 本体削除
+        try await postRef.delete()
+    }
+
+    // MARK: - Helpers
+    /// 指定クエリの結果をページングしながら一括削除（__name__ でソート → start(after:)）
+    private func batchDelete(query base: Query, pageSize: Int = 300) async throws {
+        var last: DocumentSnapshot? = nil
+        while true {
+            var q = base.order(by: FieldPath.documentID()).limit(to: pageSize)
+            if let lastDoc = last {
+                q = q.start(afterDocument: lastDoc)
+            }
+            let snap = try await q.getDocuments(source: .server)
+            if snap.documents.isEmpty { break }
+            let batch = db.batch()
+            for d in snap.documents {
+                batch.deleteDocument(d.reference)
+            }
+            try await batch.commit()
+            last = snap.documents.last
+        }
+    }
 }
