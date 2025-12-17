@@ -16,6 +16,36 @@ final class PostRepository {
     private func postRef(roomId: String, postId: String) -> DocumentReference {
         db.collection("rooms").document(roomId).collection("posts").document(postId)
     }
+
+    // MARK: - Mutes (ユーザー非表示)
+    // 保存先: rooms/{roomId}/mutes/{ownerUid}/users/{targetUid}
+    private func muteDocRef(roomIdSan: String, ownerUid: String, targetUid: String) -> DocumentReference {
+        return db
+            .collection("rooms").document(roomIdSan)
+            .collection("mutes").document(ownerUid)
+            .collection("users").document(targetUid)
+    }
+    
+    /// 指定ユーザーがミュートされているか（自分視点）
+    func isMuted(roomId: String, targetUid: String, by ownerUid: String) async throws -> Bool {
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let snap = try await muteDocRef(roomIdSan: roomIdSan, ownerUid: ownerUid, targetUid: targetUid)
+            .getDocument(source: .server)
+        return snap.exists
+    }
+    
+    /// ミュート設定/解除（true でミュート、false で解除）
+    func setMute(roomId: String, targetUid: String, by ownerUid: String, mute: Bool) async throws {
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ref = muteDocRef(roomIdSan: roomIdSan, ownerUid: ownerUid, targetUid: targetUid)
+        if mute {
+            try await ref.setData([
+                "createdAt": FieldValue.serverTimestamp()
+            ], merge: true)
+        } else {
+            try await ref.delete()
+        }
+    }
     private func likeRef(roomId: String, postId: String, uid: String) -> DocumentReference {
         db.collection("rooms").document(roomId).collection("posts").document(postId)
             .collection("likes").document(uid)
@@ -350,37 +380,39 @@ final class PostRepository {
     }
     
     // MARK: - Report (UGC)
-    /// ユーザー通報を Firestore に保存します（1ユーザー1通報：reports/{uid} へアップサート）
+    /// ユーザー通報を Firestore に保存します（1ユーザー1通報：reports/{uid} へ作成のみ許可・冪等）
     /// パス: rooms/{roomId}/posts/{postId}/reports/{uid}
     func reportPost(roomId: String, postId: String, reason: String, reporterUid: String) async throws {
         let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
         precondition(!roomIdSan.isEmpty, "roomId is empty")
+
+        let reasonSan = reason.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let reportRef = db
             .collection("rooms").document(roomIdSan)
             .collection("posts").document(postId)
             .collection("reports").document(reporterUid)
 
-        // まず update（存在時）を試し、NotFound の場合のみ set で新規作成。
+        // ルール上 `reports/{uid}` は create のみ許可（update/read は不可）。
+        // そのため、初回は setData で作成し、2回目以降は PermissionDenied になる想定。
+        // 2回目以降は「通報済み」とみなして握りつぶし（idempotent）にする。
         do {
-            try await reportRef.updateData([
-                "reason": reason,
-                "updatedAt": FieldValue.serverTimestamp()
+            try await reportRef.setData([
+                "reason": reasonSan,
+                "reporterUid": reporterUid,
+                "roomId": roomIdSan,
+                "postId": postId,
+                "createdAt": FieldValue.serverTimestamp()
             ])
-        } catch let nsError as NSError {
-            // NotFound（= ドキュメント未作成）だけフォールバック
-            if let code = FirestoreErrorCode.Code(rawValue: nsError.code), code == .notFound {
-                try await reportRef.setData([
-                    "reason": reason,
-                    "reporterUid": reporterUid,
-                    "roomId": roomIdSan,
-                    "postId": postId,
-                    "createdAt": FieldValue.serverTimestamp(),
-                    "updatedAt": FieldValue.serverTimestamp()
-                ], merge: true)
-            } else {
-                throw nsError
+        } catch {
+            let nsError = error as NSError
+            if let code = FirestoreErrorCode.Code(rawValue: nsError.code), code == .permissionDenied {
+                // 既に通報済み（=ドキュメントが存在して update 扱いになった）等。
+                // read も禁止されているため厳密判定できないので、通報済みとして扱う。
+                print("[PostRepository] reportPost ignored (already reported or no permission):", nsError)
+                return
             }
+            throw error
         }
     }
 

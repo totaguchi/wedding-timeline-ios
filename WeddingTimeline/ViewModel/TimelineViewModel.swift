@@ -14,6 +14,9 @@ import FirebaseAuth
 class TimelineViewModel {
     var posts: [TimelinePost] = []
     private let postRepo = PostRepository()
+    private let db = Firestore.firestore()
+    private var mutedUids = Set<String>()
+    private var muteListener: ListenerRegistration? = nil
     private var lastSnapshot: DocumentSnapshot? = nil
     private var listenTask: Task<Void, Never>? = nil
     private var knownIds = Set<String>()
@@ -31,8 +34,10 @@ class TimelineViewModel {
     let availableFilters: [TimelineFilter] = TimelineFilter.allCases
 
     var filteredPosts: [TimelinePost] {
-        guard selectedFilter != .all else { return posts }
-        return posts.filter { matchesFilter($0, selectedFilter) }
+        // ミュート対象の投稿は常に除外
+        let base = posts.filter { !mutedUids.contains($0.authorId) }
+        guard selectedFilter != .all else { return base }
+        return base.filter { matchesFilter($0, selectedFilter) }
     }
 
     init () {}
@@ -54,8 +59,8 @@ class TimelineViewModel {
                 limit: 50,
                 startAfter: lastSnapshot
             )
-            // 重複IDを除外して追加
-            let newOnes = models.filter { !knownIds.contains($0.id) }
+            // 重複ID・ミュート対象を除外して追加
+            let newOnes = models.filter { !knownIds.contains($0.id) && !mutedUids.contains($0.authorId) }
             posts.append(contentsOf: newOnes)
             knownIds.formUnion(newOnes.map { $0.id })
             lastSnapshot = cursor
@@ -81,6 +86,8 @@ class TimelineViewModel {
             // 既存は更新、未知は先頭に追加（重複防止）
             var toInsert: [TimelinePost] = []
             for item in head {
+                // ミュート対象はスキップ
+                if mutedUids.contains(item.authorId) { continue }
                 if let idx = posts.firstIndex(where: { $0.id == item.id }) {
                     posts[idx] = item
                 } else if !knownIds.contains(item.id) {
@@ -126,6 +133,8 @@ class TimelineViewModel {
         // 既存の購読があれば停止（posts/knownIds/lastSnapshot は維持）。isLiked も統合済みストリームを利用。
         listenTask?.cancel()
         listenTask = nil
+        // ミュート購読を開始（ルーム切替時に更新）
+        startMuteListening(roomId: roomId)
 
         // knownIds が空の場合は、既存 posts から初期化しておく（重複防止）
         if knownIds.isEmpty {
@@ -143,6 +152,8 @@ class TimelineViewModel {
 
                         // 既存IDは更新・未知IDは先頭挿入 or バッファに収集
                         for item in items {
+                            // ミュート対象はスキップ
+                            if self.mutedUids.contains(item.authorId) { continue }
                             if let idx = self.posts.firstIndex(where: { $0.id == item.id }) {
                                 self.posts[idx] = item
                             } else if !self.knownIds.contains(item.id) {
@@ -173,6 +184,8 @@ class TimelineViewModel {
     func stopListening() {
         listenTask?.cancel()
         listenTask = nil
+        muteListener?.remove()
+        muteListener = nil
     }
 
     @MainActor
@@ -238,11 +251,55 @@ class TimelineViewModel {
         }
     }
     
+    // MARK: - Mute Listening
+    @MainActor
+    func startMuteListening(roomId: String) {
+        // 既存リスナー解除
+        muteListener?.remove()
+        muteListener = nil
+        
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ref = db.collection("rooms").document(roomIdSan)
+            .collection("mutes").document(uid)
+            .collection("users")
+        
+        muteListener = ref.addSnapshotListener { [weak self] snap, err in
+            guard let self else { return }
+            if let err {
+                print("[Mute] listen error:", err)
+                return
+            }
+            // 現在のミュート対象をセットで再構築
+            var next = Set<String>()
+            snap?.documents.forEach { next.insert($0.documentID) }
+            // 反映（除外する）
+            self.mutedUids = next
+            // すでに保持している投稿からも除外・整合
+            self.posts.removeAll(where: { self.mutedUids.contains($0.authorId) })
+            self.knownIds = Set(self.posts.map { $0.id })
+            // ペンディングも掃除してバッジ更新
+            self.pendingNew.removeAll(where: { self.mutedUids.contains($0.authorId) })
+            self.newBadgeCount = min(99, self.pendingNew.count)
+        }
+    }
+    
+    @MainActor
+    func stopMuteListening() {
+        muteListener?.remove()
+        muteListener = nil
+    }
+
     private func matchesFilter(_ post: TimelinePost, _ filter: TimelineFilter) -> Bool {
         switch filter {
         case .all:       return true
         case .ceremony:  return post.tag == .ceremony
         case .reception:  return post.tag == .reception
         }
+    }
+
+    @MainActor
+    deinit {
+        stopListening()
     }
 }

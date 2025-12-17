@@ -22,6 +22,7 @@ struct PostDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var deleteError: String?
+    @State private var isMuted = false
 
     private let reportReasons: [String] = ["スパム/宣伝", "不適切な表現", "プライバシーの侵害", "その他"]
     private let postRepo = PostRepository()
@@ -41,6 +42,33 @@ struct PostDetailView: View {
                 await MainActor.run { showReportDone = true }
             } catch {
                 print("[Report] failed:", error)
+            }
+        }
+    }
+    
+    @MainActor
+    private func loadMuteState() {
+        guard let uid = Auth.auth().currentUser?.uid, !session.currentRoomId.isEmpty else { return }
+        Task {
+            do {
+                let muted = try await postRepo.isMuted(roomId: session.currentRoomId, targetUid: model.authorId, by: uid)
+                await MainActor.run { self.isMuted = muted }
+            } catch {
+                print("[Mute] check failed:", error)
+            }
+        }
+    }
+    
+    @MainActor
+    private func toggleMuteUser() {
+        guard let uid = Auth.auth().currentUser?.uid, !session.currentRoomId.isEmpty else { return }
+        let next = !isMuted
+        Task {
+            do {
+                try await postRepo.setMute(roomId: session.currentRoomId, targetUid: model.authorId, by: uid, mute: next)
+                await MainActor.run { self.isMuted = next }
+            } catch {
+                print("[Mute] set failed:", error)
             }
         }
     }
@@ -80,6 +108,15 @@ struct PostDetailView: View {
                             Button(reason, role: .destructive) {
                                 reportToFirestore(reason: reason)
                             }
+                        }
+                    }
+                    Button {
+                        toggleMuteUser()
+                    } label: {
+                        if isMuted {
+                            Label("ミュートを解除", systemImage: "speaker.wave.2.fill")
+                        } else {
+                            Label("このユーザーをミュート", systemImage: "speaker.slash.fill")
                         }
                     }
                     if isMine {
@@ -128,6 +165,9 @@ struct PostDetailView: View {
                     )
                 }
             }
+        }
+        .task {
+            loadMuteState()
         }
     }
 }
