@@ -12,6 +12,28 @@ struct LoginView: View {
     @State private var vm = LoginViewModel()
     @State private var showAvatarPicker = false
 
+    @FocusState private var focus: FocusField?
+    private enum FocusField { case roomId, roomKey, username }
+
+    private var joinEnabled: Bool {
+        let idOK  = !vm.roomId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let keyOK = !vm.roomKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let nameOK = !vm.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return idOK && keyOK && nameOK && vm.selectedIcon != nil && !vm.isLogin
+    }
+
+    @ViewBuilder
+    private var joinButtonBackground: some View {
+        if joinEnabled {
+            LinearGradient(
+                colors: [TLColor.btnCategorySelFrom, TLColor.icoCategoryPurple],
+                startPoint: .leading, endPoint: .trailing
+            )
+        } else {
+            TLColor.borderCard // 無効時は薄いグレー系
+        }
+    }
+
     var body: some View {
         ZStack {
             // Background gradient + subtle decoration
@@ -31,6 +53,32 @@ struct LoginView: View {
                     }
                     .padding(.top, 24)
 
+                    if let msg = vm.errorMessage {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(TLColor.textDeleteTitle)
+                                .padding(.top, 2)
+                            Text(msg)
+                                .font(.footnote)
+                                .foregroundStyle(TLColor.textDeleteTitle)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.red.opacity(0.08))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(TLColor.textDeleteTitle.opacity(0.25), lineWidth: 1)
+                        )
+                        .padding(.horizontal)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .animation(.easeInOut(duration: 0.2), value: vm.errorMessage)
+                    }
+
                     // MARK: Card
                     VStack(alignment: .leading, spacing: 16) {
                         FieldLabel(system: "wand.and.stars", title: "Room ID")
@@ -38,14 +86,20 @@ struct LoginView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .modifier(InputField())
+                            .focused($focus, equals: .roomId)
+                            .submitLabel(.next)
 
                         FieldLabel(system: "key.fill", title: "Room Key")
                         SecureField("ルームキーを入力", text: $vm.roomKey)
                             .modifier(InputField())
+                            .focused($focus, equals: .roomKey)
+                            .submitLabel(.next)
 
                         FieldLabel(system: "person.fill", title: "Username")
                         TextField("ユーザー名を入力", text: $vm.username)
                             .modifier(InputField())
+                            .focused($focus, equals: .username)
+                            .submitLabel(.join)
 
                         FieldLabel(system: "photo.on.rectangle.angled", title: "プロフィールアイコン")
                         Button {
@@ -100,29 +154,40 @@ struct LoginView: View {
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(
-                            LinearGradient(colors: [TLColor.btnCategorySelFrom, TLColor.icoCategoryPurple], startPoint: .leading, endPoint: .trailing)
-                        )
-                        .foregroundStyle(TLColor.btnCategorySelText)
+                        .background(joinButtonBackground)
+                        .foregroundStyle(joinEnabled ? TLColor.btnCategorySelText : TLColor.textMeta)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: TLColor.hoverTextPink500.opacity(0.25), radius: 12, y: 8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .strokeBorder(joinEnabled ? .clear : TLColor.borderCard.opacity(0.8), lineWidth: 1)
+                        )
+                        .shadow(color: TLColor.hoverTextPink500.opacity(joinEnabled ? 0.25 : 0.0), radius: 12, y: 8)
                     }
                     .padding(.horizontal)
-                    .disabled(vm.roomId.isEmpty || vm.roomKey.isEmpty || vm.username.isEmpty || vm.isLogin || vm.selectedIcon == nil)
+                    .disabled(!joinEnabled)
+                    .opacity(joinEnabled ? 1 : 0.6)
+                    .animation(.easeInOut(duration: 0.2), value: joinEnabled)
                     .overlay(alignment: .center) {
                         if vm.isLogin { ProgressView().tint(TLColor.btnCategorySelText) }
-                    }
-
-                    if let msg = vm.errorMessage {
-                        Text(msg)
-                            .font(.footnote)
-                            .foregroundStyle(TLColor.textDeleteTitle)
-                            .padding(.horizontal)
                     }
 
                     Spacer(minLength: 24)
                 }
                 .padding(.vertical)
+            }
+        }
+        .onSubmit {
+            switch focus {
+            case .roomId:
+                focus = .roomKey
+            case .roomKey:
+                focus = .username
+            case .username:
+                if joinEnabled {
+                    Task { await vm.join(session: session) }
+                }
+            case .none:
+                break
             }
         }
         .sheet(isPresented: $showAvatarPicker) {
@@ -163,6 +228,10 @@ private struct InputField: ViewModifier {
                     .background(RoundedRectangle(cornerRadius: 12).fill(TLColor.bgCard))
             )
     }
+}
+
+private extension String {
+    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
 #Preview {

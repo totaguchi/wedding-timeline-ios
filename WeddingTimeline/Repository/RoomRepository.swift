@@ -2,7 +2,7 @@
 //  RoomRepository.swift
 //  WeddingTimeline
 //
-//  Created by 田口友暉 on 2025/08/31.
+//  Created by 田口友暼 on 2025/08/31.
 //
 
 import Foundation
@@ -29,6 +29,23 @@ final class RoomRepository {
         let roomIdSan = params.roomId.trimmingCharacters(in: .whitespacesAndNewlines)
         let roomKeySan = params.roomKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let userNameSan = params.username.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 入力チェック（画面にそのまま出せる文言）
+        guard !roomIdSan.isEmpty else {
+            throw NSError(domain: "JoinRoom", code: 1001, userInfo: [
+                NSLocalizedDescriptionKey: "ルームIDを入力してください。"
+            ])
+        }
+        guard !roomKeySan.isEmpty else {
+            throw NSError(domain: "JoinRoom", code: 1002, userInfo: [
+                NSLocalizedDescriptionKey: "入室キーを入力してください。"
+            ])
+        }
+        guard !userNameSan.isEmpty else {
+            throw NSError(domain: "JoinRoom", code: 1003, userInfo: [
+                NSLocalizedDescriptionKey: "ユーザー名を入力してください。"
+            ])
+        }
 
         let uid = try await signInAnonymouslyIfNeeded()
         
@@ -70,12 +87,19 @@ final class RoomRepository {
         } catch {
             let ns = error as NSError
             print("[RoomRepository] joinRoom transaction failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw error
+            throw self.mapJoinError(error, roomId: roomIdSan)
         }
 
         // create のときのみ providedKey を消す
         if !existed {
-            try await memberRef.updateData(["providedKey": FieldValue.delete()])
+            do {
+                try await memberRef.updateData(["providedKey": FieldValue.delete()])
+            } catch {
+                // ここは致命的でない（入室自体は成功）。ログ出力のみに留めるか、必要ならユーザー文言に変換して投げる
+                let ns = error as NSError
+                print("[RoomRepository] cleanup providedKey failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
+                // 失敗しても入室自体は完了しているため、画面には出さない運用にする（必要なら throw mapJoinError(error, roomId: roomIdSan)）
+            }
         }
     }
     
@@ -264,6 +288,76 @@ final class RoomRepository {
         }
     }
    
+    // MARK: - Error mapping (user friendly)
+    /// Firestore/Auth/Network のエラーを画面向けの文言に変換
+    private func mapJoinError(_ error: Error, roomId: String) -> NSError {
+        let ns = error as NSError
+        let domain = ns.domain
+
+        // Firestore
+        if domain == FirestoreErrorDomain || domain == "FIRFirestoreErrorDomain" {
+            let msg: String
+            switch ns.code {
+            case 7: // permission-denied
+                // B方式（rules内 get で roomKey を照合）の場合、キー不一致/roomId誤り/未会員読みなどがすべて permission-denied に集約される
+                msg = "入室に失敗しました。ルームIDまたは入室キーが正しいか確認してください。"
+            case 5: // not-found
+                msg = "指定のルームが見つかりませんでした。ルームIDをご確認ください。"
+            case 4: // deadline-exceeded
+                msg = "タイムアウトしました。通信環境を確認して、もう一度お試しください。"
+            case 14: // unavailable
+                msg = "サーバーに接続できませんでした。しばらくしてから再度お試しください。"
+            case 2: // cancelled
+                msg = "操作がキャンセルされました。再度お試しください。"
+            default:
+                msg = "入室に失敗しました（\(ns.code)）。しばらくしてから再度お試しください。"
+            }
+            return NSError(domain: "JoinRoom", code: ns.code, userInfo: [
+                NSLocalizedDescriptionKey: msg,
+                NSUnderlyingErrorKey: ns
+            ])
+        }
+
+        // Auth
+        if domain == AuthErrorDomain || domain == "FIRAuthErrorDomain" {
+            let code = ns.code
+            let msg: String
+            switch code {
+            case AuthErrorCode.networkError.rawValue:
+                msg = "ネットワークエラーのためサインインできませんでした。通信状況を確認して再度お試しください。"
+            case AuthErrorCode.tooManyRequests.rawValue:
+                msg = "リクエストが集中しています。時間をおいて再度お試しください。"
+            default:
+                msg = "サインインに失敗しました。もう一度お試しください。"
+            }
+            return NSError(domain: "JoinRoom", code: code, userInfo: [
+                NSLocalizedDescriptionKey: msg,
+                NSUnderlyingErrorKey: ns
+            ])
+        }
+
+        // Networking
+        if domain == NSURLErrorDomain {
+            let msg: String
+            switch ns.code {
+            case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut:
+                msg = "ネットワークに接続できません。通信環境を確認して再度お試しください。"
+            default:
+                msg = "通信エラーが発生しました。時間をおいてお試しください。"
+            }
+            return NSError(domain: "JoinRoom", code: ns.code, userInfo: [
+                NSLocalizedDescriptionKey: msg,
+                NSUnderlyingErrorKey: ns
+            ])
+        }
+
+        // Fallback
+        return NSError(domain: "JoinRoom", code: ns.code, userInfo: [
+            NSLocalizedDescriptionKey: "入室に失敗しました。しばらくしてから再度お試しください。",
+            NSUnderlyingErrorKey: ns
+        ])
+    }
+    
     // MARK: - Transaction async wrapper
     // NOTE: Session は @MainActor だが、Firestore のトランザクションは内部スレッドで実行される。
     // MainActor 隔離のクロージャをそのまま渡すと実行キュー不一致でクラッシュするため、
