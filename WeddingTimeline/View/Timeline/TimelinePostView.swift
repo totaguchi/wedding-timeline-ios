@@ -14,6 +14,10 @@ struct TimelinePostView: View {
     let enableNavigation: Bool
     let onToggleLike: (Bool) -> Void
     let onPostDelete: (@Sendable (String) async -> Bool)
+    let icons = [
+        "oomimigitsune", "lesser_panda", "bear",
+        "todo", "musasabi", "rakko"
+    ]
     @State private var galleryStartIndex = 0
     @State private var isGalleryPresented = false
     @State private var likeBusy = false
@@ -32,10 +36,17 @@ struct TimelinePostView: View {
     
     var body: some View {
         HStack(alignment: .top) {
-            Image(model.userIcon)
-                .resizable()
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
+            if model.userIcon.isEmpty || !icons.contains(model.userIcon) {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+            } else {
+                Image(model.userIcon)
+                    .resizable()
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+            }
 
             VStack(alignment: .leading, spacing: 5) {
                 if enableNavigation {

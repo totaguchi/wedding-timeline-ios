@@ -30,38 +30,16 @@ final class RoomRepository {
         let roomKeySan = params.roomKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let userNameSan = params.username.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // 匿名サインインして uid を確保
-        if Auth.auth().currentUser == nil {
-            _ = try await Auth.auth().signInAnonymously()
-        }
-        guard let uid = Auth.auth().currentUser?.uid else { throw JoinError.notSignedIn }
+        let uid = try await signInAnonymouslyIfNeeded()
         
         // 既に会員かどうかを先に確認
         let existed = try await isUserAlreadyInRoom(roomId: roomIdSan, uid: uid)
 
         let roomRef   = db.collection("rooms").document(roomIdSan)
-        let secretRef = db.collection("roomSecrets").document(roomIdSan)
         let memberRef = roomRef.collection("members").document(uid)
         let usernameLower = userNameSan.lowercased()
 
-        // 未入室（create）のときのみ roomKey をサーバーで検証
-        if !existed {
-            do {
-                let secretSnap = try await secretRef.getDocument(source: .server)
-                guard let secretData = secretSnap.data(),
-                      let storedKey = secretData["roomKey"] as? String else {
-                    throw NSError(domain: "Auth", code: 404, userInfo: [NSLocalizedDescriptionKey: "このルームは存在しません"])
-                }
-                guard storedKey == roomKeySan else {
-                    throw NSError(domain: "Auth", code: 403, userInfo: [NSLocalizedDescriptionKey: "ルームキーが違います"])
-                }
-            } catch {
-                let ns = error as NSError
-                print("[RoomRepository] roomKey validation failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-                throw error
-            }
-        }
-
+        // NOTE: roomSecrets はクライアントから読まない。providedKey はルール側で照合。
         do {
             try await runTransactionAsync(db: db) { (txn: FirebaseFirestore.Transaction) in
                 if existed {
