@@ -2,7 +2,7 @@
 //  RoomRepository.swift
 //  WeddingTimeline
 //
-//  Created by 田口友暼 on 2025/08/31.
+//  Created by 田口友暉 on 2025/08/31.
 //
 
 import Foundation

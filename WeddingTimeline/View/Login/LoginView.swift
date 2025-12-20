@@ -119,7 +119,7 @@ struct LoginView: View {
                                         .foregroundStyle(TLColor.textMeta)
                                 }
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(vm.selectedIcon ?? "アバター 1")
+                                    Text(vm.selectedIcon ?? "アバター")
                                         .font(.subheadline).bold()
                                     Text("タップして変更")
                                         .font(.caption)
