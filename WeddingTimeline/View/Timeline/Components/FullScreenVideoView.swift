@@ -14,6 +14,7 @@ struct FullScreenVideoView: View {
     let player: AVPlayer
     let caption: String?
     let initialDuration: Double
+    let sourceURL: URL?
     @Environment(\.dismiss) private var dismiss
     @State private var isMuted = false
     @State private var isPlaying = true
@@ -25,10 +26,11 @@ struct FullScreenVideoView: View {
     @State private var isShareSheetPresented = false
     @State private var shareItems: [Any] = []
 
-    init(player: AVPlayer, caption: String?, initialDuration: Double = 0) {
+    init(player: AVPlayer, caption: String?, initialDuration: Double = 0, sourceURL: URL? = nil) {
         self.player = player
         self.caption = caption
         self.initialDuration = initialDuration
+        self.sourceURL = sourceURL
     }
 
     var body: some View {
@@ -151,6 +153,7 @@ struct FullScreenVideoView: View {
         .onAppear {
             durationSec = initialDuration
             setupTimeObserver()
+            upgradeToFullQualityIfNeeded()
             player.isMuted = false
             isMuted = false
             player.play()
@@ -212,6 +215,17 @@ struct FullScreenVideoView: View {
         let m = total / 60
         let s = total % 60
         return String(format: "%02d:%02d", m, s)
+    }
+
+    private func upgradeToFullQualityIfNeeded() {
+        guard let url = sourceURL else { return }
+        let current = player.currentTime()
+        let item = AVPlayerItem(url: url)
+        item.preferredForwardBufferDuration = 0 // デフォルト
+        player.replaceCurrentItem(with: item)
+        seek(to: current.seconds) {
+            if isPlaying { player.play() }
+        }
     }
     
     /// 現在の AVPlayerItem から動画ファイルを一時URLに用意して共有シートを表示
