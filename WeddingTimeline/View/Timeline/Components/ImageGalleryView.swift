@@ -17,8 +17,7 @@ struct ImageGalleryView: View {
     @State private var isDownloading: Bool = false
     @State private var showSaveConfirmation: Bool = false
     @State private var isPreparingShare: Bool = false
-    @State private var isShareSheetPresented: Bool = false
-    @State private var shareItems: [Any] = []
+    @State private var sharePayload: SharePayload?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -91,8 +90,8 @@ struct ImageGalleryView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .sheet(isPresented: $isShareSheetPresented) {
-            ActivityView(activityItems: shareItems)
+        .sheet(item: $sharePayload) { payload in
+            ActivityView(activityItems: [payload.item])
                 .ignoresSafeArea()
         }
     }
@@ -112,11 +111,17 @@ struct ImageGalleryView: View {
             try jpeg.write(to: tmp, options: .atomic)
 
             await MainActor.run {
-                self.shareItems = [tmp]
-                self.isShareSheetPresented = true
+                // 初回でも確実にトリガーされるようにいったん nil を挟む
+                self.sharePayload = nil
+                self.sharePayload = SharePayload(item: tmp)
             }
         } catch {
             print("[Share] failed:", error)
         }
     }
+}
+
+private struct SharePayload: Identifiable {
+    let id = UUID()
+    let item: URL
 }

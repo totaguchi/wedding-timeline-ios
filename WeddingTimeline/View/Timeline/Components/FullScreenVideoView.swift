@@ -23,8 +23,7 @@ struct FullScreenVideoView: View {
     @State private var isScrubbing = false
     @State private var timeObserver: Any?
     @State private var isPreparingShare = false
-    @State private var isShareSheetPresented = false
-    @State private var shareItems: [Any] = []
+    @State private var shareItem: SharePayload?
 
     init(player: AVPlayer, caption: String?, initialDuration: Double = 0, sourceURL: URL? = nil) {
         self.player = player
@@ -164,8 +163,8 @@ struct FullScreenVideoView: View {
             player.isMuted = true
             isPlaying = false
         }
-        .sheet(isPresented: $isShareSheetPresented) {
-            ActivityView(activityItems: shareItems)
+        .sheet(item: $shareItem) { payload in
+            ActivityView(activityItems: [payload.item])
                 .ignoresSafeArea()
         }
     }
@@ -243,8 +242,9 @@ struct FullScreenVideoView: View {
                 fileURL = try await exportAssetToTempFile(asset)
             }
             await MainActor.run {
-                self.shareItems = [fileURL]
-                self.isShareSheetPresented = true
+                // いったん nil にしてから入れ直すことで初回でも正しくシートが表示される
+                self.shareItem = nil
+                self.shareItem = SharePayload(item: fileURL)
             }
         } catch {
             print("[Share] video share failed:", error)
@@ -295,6 +295,11 @@ struct FullScreenVideoView: View {
             throw exporter.error ?? NSError(domain: "VideoShare", code: -11, userInfo: [NSLocalizedDescriptionKey: "Export failed with status \(exporter.status.rawValue)"])
         }
     }
+}
+
+private struct SharePayload: Identifiable {
+    let id = UUID()
+    let item: URL
 }
 
 #Preview {
