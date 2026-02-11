@@ -46,6 +46,31 @@ final class PostRepository {
             try await ref.delete()
         }
     }
+
+    /// 自分がミュートしているユーザー一覧をリアルタイム購読する
+    /// - Returns: ミュート対象 uid の集合を流すストリーム
+    func listenMutedUserIds(roomId: String, ownerUid: String) -> AsyncThrowingStream<Set<String>, Error> {
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ref = db
+            .collection("rooms").document(roomIdSan)
+            .collection("mutes").document(ownerUid)
+            .collection("users")
+
+        return AsyncThrowingStream { cont in
+            let listener = ref.addSnapshotListener { snap, err in
+                if let err { cont.yield(with: .failure(err)); return }
+                guard let snap else { return }
+                var muted = Set<String>()
+                snap.documents.forEach { muted.insert($0.documentID) }
+                cont.yield(muted)
+            }
+            let box = ListenerBox(listener.remove)
+            cont.onTermination = { _ in
+                Task { @MainActor in box.remove() }
+            }
+        }
+    }
+
     private func likeRef(roomId: String, postId: String, uid: String) -> DocumentReference {
         db.collection("rooms").document(roomId).collection("posts").document(postId)
             .collection("likes").document(uid)
@@ -377,6 +402,37 @@ final class PostRepository {
 
         let docRef = db.collection("rooms").document(roomIdSan).collection("posts").document(postId)
         try await docRef.setData(payload)
+    }
+
+    /// いいね数トップの投稿を取得（ランキング用）
+    /// - Parameters:
+    ///   - roomId: ルームID
+    ///   - limit: 取得件数（デフォルト3）
+    ///   - tag: nil ならすべて、指定で絞り込み
+    func fetchTopPosts(roomId: String, limit: Int = 3, tag: PostTag? = nil) async throws -> [TimelinePost] {
+        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var q: Query = db.collection("rooms").document(roomIdSan)
+            .collection("posts")
+
+        if let tag {
+            q = q.whereField("tag", isEqualTo: tag.rawValue)
+        }
+
+        q = q.order(by: "likeCount", descending: true).limit(to: limit)
+
+        let snap = try await q.getDocuments(source: .server)
+        let models: [TimelinePost] = snap.documents.compactMap { doc in
+            do {
+                var dto = try doc.data(as: TimelinePostDTO.self)
+                if dto.id == nil { dto.id = doc.documentID }
+                return TimelinePost(dto: dto)
+            } catch {
+                print("[PostRepository] fetchTopPosts decode failed id=\(doc.documentID):", error)
+                return nil
+            }
+        }
+        return models
     }
     
     // MARK: - Report (UGC)

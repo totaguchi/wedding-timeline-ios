@@ -14,6 +14,7 @@ struct TimelinePostView: View {
     let enableNavigation: Bool
     let onToggleLike: (Bool) -> Void
     let onPostDelete: (@Sendable (String) async -> Bool)
+    let onMuteChanged: ((String, Bool) -> Void)?
     let icons = [
         "oomimigitsune", "lesser_panda", "bear",
         "todo", "musasabi", "rakko"
@@ -27,11 +28,18 @@ struct TimelinePostView: View {
     var useRoomScopedTag: Bool = true   // true: roomId + uid のハッシュでルームごとに変化
     var tagLength: Int = 4              // 既定は4文字（@abcd）
     
-    init(model: TimelinePost, enableNavigation: Bool = true, onToggleLike: @escaping (Bool) -> Void, onPostDelete: @escaping (@Sendable (String) async -> Bool)) {
+    init(
+        model: TimelinePost,
+        enableNavigation: Bool = true,
+        onToggleLike: @escaping (Bool) -> Void,
+        onPostDelete: @escaping (@Sendable (String) async -> Bool),
+        onMuteChanged: ((String, Bool) -> Void)? = nil
+    ) {
         self.model = model
         self.enableNavigation = enableNavigation
         self.onToggleLike = onToggleLike
         self.onPostDelete = onPostDelete
+        self.onMuteChanged = onMuteChanged
     }
     
     var body: some View {
@@ -51,7 +59,12 @@ struct TimelinePostView: View {
             VStack(alignment: .leading, spacing: 5) {
                 if enableNavigation {
                     NavigationLink {
-                        PostDetailView(model: model, onToggleLike: onToggleLike, onPostDelete: onPostDelete)
+                        PostDetailView(
+                            model: model,
+                            onToggleLike: onToggleLike,
+                            onPostDelete: onPostDelete,
+                            onMuteChanged: onMuteChanged
+                        )
                     } label: {
                         headerAndContent
                             .contentShape(Rectangle())

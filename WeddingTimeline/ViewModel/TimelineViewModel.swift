@@ -251,6 +251,21 @@ class TimelineViewModel {
         }
     }
     
+    // MARK: - Mute
+    @MainActor
+    func applyMuteChange(targetUid: String, isMuted: Bool) {
+        if isMuted {
+            mutedUids.insert(targetUid)
+        } else {
+            mutedUids.remove(targetUid)
+        }
+
+        posts.removeAll(where: { mutedUids.contains($0.authorId) })
+        knownIds = Set(posts.map { $0.id })
+        pendingNew.removeAll(where: { mutedUids.contains($0.authorId) })
+        newBadgeCount = min(99, pendingNew.count)
+    }
+
     // MARK: - Mute Listening
     @MainActor
     func startMuteListening(roomId: String) {

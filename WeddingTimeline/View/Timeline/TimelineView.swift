@@ -63,6 +63,10 @@ struct TimelineView: View {
                                     let roomId = await MainActor.run { activeRoomId }
                                     guard let roomId else { return false }
                                     return await model.deletePost(roomId: roomId, postId: postId)
+                                } onMuteChanged: { targetUid, isMuted in
+                                    Task { @MainActor in
+                                        model.applyMuteChange(targetUid: targetUid, isMuted: isMuted)
+                                    }
                                 }
                                 .padding(.horizontal, 10)
                                 .onAppear {

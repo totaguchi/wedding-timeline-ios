@@ -14,6 +14,8 @@ struct PostDetailView: View {
     /// 親（TimelineView / ViewModel）に削除処理を委譲するためのコールバック（省略可）
     /// - Returns: 成功したら true
     let onPostDelete: (@Sendable (String) async -> Bool)
+    /// ミュート状態が変わったら親に通知（省略可）
+    let onMuteChanged: ((String, Bool) -> Void)?
 
     @Environment(Session.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -66,7 +68,10 @@ struct PostDetailView: View {
         Task {
             do {
                 try await postRepo.setMute(roomId: session.currentRoomId, targetUid: model.authorId, by: uid, mute: next)
-                await MainActor.run { self.isMuted = next }
+                await MainActor.run {
+                    self.isMuted = next
+                    onMuteChanged?(model.authorId, next)
+                }
             } catch {
                 print("[Mute] set failed:", error)
             }
