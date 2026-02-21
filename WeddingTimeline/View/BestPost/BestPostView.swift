@@ -182,7 +182,7 @@ private struct RankCard: View {
                                 .foregroundStyle(TLColor.textAuthor)
                             Text(" \(tag)").font(.caption).foregroundStyle(TLColor.textMeta)
                         }
-                        Text(DateFormatter.appCreatedAt.string(from: model.createdAt))
+                        Text(model.formattedCreatedAt)
                             .foregroundStyle(TLColor.textMeta)
                     }
                     Spacer()

@@ -23,7 +23,9 @@ struct TimelinePost: Identifiable {
     var isLiked: Bool
     var media: [Media]
     var tag: PostTag
-    
+    /// 初期化時に計算済みの日付文字列（毎描画の DateFormatter 呼び出しを回避）
+    let formattedCreatedAt: String
+
     init(
         id: String,
         authorId: String,
@@ -50,6 +52,7 @@ struct TimelinePost: Identifiable {
         self.media = media
         self.isLiked = isLiked
         self.tag = tag
+        self.formattedCreatedAt = DateFormatter.appCreatedAt.string(from: createdAt)
     }
 }
 

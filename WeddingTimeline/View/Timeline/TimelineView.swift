@@ -51,7 +51,7 @@ struct TimelineView: View {
                                         )
                                     }
                                 )
-                            ForEach(model.filteredPosts, id: \.id) { post in
+                            ForEach(Array(model.filteredPosts.enumerated()), id: \.element.id) { index, post in
                                 TimelinePostView(
                                     model: post
                                 ) { isLiked in
@@ -70,18 +70,16 @@ struct TimelineView: View {
                                 }
                                 .padding(.horizontal, 10)
                                 .onAppear {
-                                    if post.id == model.posts.last?.id {
+                                    if index == model.filteredPosts.count - 1 {
                                         guard let roomId = activeRoomId else { return }
                                         Task { await model.fetchPosts(roomId: roomId) }
                                     }
-                                    // Preheat images for upcoming posts
-                                    preheatAround(postId: post.id, ahead: 12)
+                                    preheatAround(index: index, ahead: 12)
                                 }
                                 .onDisappear {
-                                    // Cancel preheating around posts that scrolled far away
-                                    cancelPreheatAround(postId: post.id, ahead: 20)
+                                    cancelPreheatAround(index: index, ahead: 20)
                                 }
-                                if post.id != model.filteredPosts.last?.id {
+                                if index < model.filteredPosts.count - 1 {
                                     Rectangle()
                                         .frame(height: 1)
                                         .foregroundStyle(TLColor.borderCard.opacity(0.15))
@@ -177,20 +175,17 @@ struct TimelineView: View {
         prefetcher.startPrefetching(with: urls)
     }
     
-    private func preheatAround(postId: String, ahead: Int) {
-        guard let idx = model.filteredPosts.firstIndex(where: { $0.id == postId }) else { return }
-        let start = idx
-        let end = min(model.filteredPosts.count - 1, idx + ahead)
-        guard start <= end else { return }
-        let urls = collectImageURLs(in: start...end)
+    private func preheatAround(index: Int, ahead: Int) {
+        let end = min(model.filteredPosts.count - 1, index + ahead)
+        guard index <= end else { return }
+        let urls = collectImageURLs(in: index...end)
         guard !urls.isEmpty else { return }
         prefetcher.startPrefetching(with: urls)
     }
-    
-    private func cancelPreheatAround(postId: String, ahead: Int) {
-        guard let idx = model.filteredPosts.firstIndex(where: { $0.id == postId }) else { return }
-        let start = max(0, idx - ahead)
-        let end = min(model.filteredPosts.count - 1, idx + ahead)
+
+    private func cancelPreheatAround(index: Int, ahead: Int) {
+        let start = max(0, index - ahead)
+        let end = min(model.filteredPosts.count - 1, index + ahead)
         guard start <= end else { return }
         let urls = collectImageURLs(in: start...end)
         guard !urls.isEmpty else { return }
