@@ -61,6 +61,7 @@ class TimelineViewModel {
                 lastSnapshot = nil
                 posts.removeAll()
                 knownIds.removeAll()
+                rebuildFilteredPosts() // reset 直後に UI を空状態へ同期（fetch 失敗時も一致を保つ）
             }
             let (models, cursor) = try await postRepo.fetchPosts(
                 roomId: roomId,

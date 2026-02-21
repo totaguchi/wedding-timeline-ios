@@ -16,7 +16,7 @@ struct TimelinePost: Identifiable {
     var userName: String
     var userIcon: String
     var content: String
-    var createdAt: Date
+    let createdAt: Date          // 投稿日時は不変。let にすることで formattedCreatedAt との乖離を防ぐ
     var replyCount: Int
     var retweetCount: Int
     var likeCount: Int
@@ -24,6 +24,7 @@ struct TimelinePost: Identifiable {
     var media: [Media]
     var tag: PostTag
     /// 初期化時に計算済みの日付文字列（毎描画の DateFormatter 呼び出しを回避）
+    /// DateFormatter.appCreatedAt は @MainActor コンテキスト（Repository / SwiftUI body）からのみ呼ばれるため安全
     let formattedCreatedAt: String
 
     init(

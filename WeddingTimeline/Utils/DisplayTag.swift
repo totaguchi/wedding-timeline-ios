@@ -12,10 +12,13 @@ enum DisplayTag {
     static let tagLength: Int = 4
     static let useRoomScopedTag: Bool = true
 
-    /// キャッシュ: "roomId:uid" -> "@xxxx"（SHA256 の再計算を回避）
-    private static var cache: [String: String] = [:]
+    /// キャッシュ: "roomId:uid:length" -> "@xxxx"（SHA256 の再計算を回避）
+    /// @MainActor で保護しているため、呼び出し元は常にメインスレッドであること
+    @MainActor private static var cache: [String: String] = [:]
 
     /// ルームスコープな短縮タグ（@xxxx）を生成
+    /// 呼び出し元: SwiftUI body（@MainActor）のみを想定
+    @MainActor
     static func make(roomId: String, uid: String, length: Int? = nil, useRoomScoped: Bool? = nil) -> String {
         let raw = length ?? Self.tagLength
         let n = max(1, raw)
@@ -24,6 +27,7 @@ enum DisplayTag {
     }
 
     /// ルームIDとuidのハッシュから生成（ルームを跨ぐ追跡を避けられる）
+    @MainActor
     static func roomScoped(roomId: String, uid: String, length: Int = Self.tagLength) -> String {
         let key = "\(roomId):\(uid):\(length)"
         if let cached = cache[key] { return cached }
