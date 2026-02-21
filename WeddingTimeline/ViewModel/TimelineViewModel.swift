@@ -13,6 +13,7 @@ import FirebaseAuth
 @Observable
 class TimelineViewModel {
     var posts: [TimelinePost] = []
+    private(set) var filteredPosts: [TimelinePost] = []
     private let postRepo = PostRepository()
     private let db = Firestore.firestore()
     private var mutedUids = Set<String>()
@@ -23,21 +24,28 @@ class TimelineViewModel {
     private var isFetching = false
     private var isRefreshing = false
     private var likeInFlight: Set<String> = []
-    
+
     // 新着のバッジ表示用（X っぽい動作）
     var newBadgeCount: Int = 0
     private var pendingNew: [TimelinePost] = []
     var isAtTop: Bool = true
-    
+
     // フィルター（上部チップ/タブ）
-    var selectedFilter: TimelineFilter = .all
+    var selectedFilter: TimelineFilter = .all {
+        didSet { rebuildFilteredPosts() }
+    }
     let availableFilters: [TimelineFilter] = TimelineFilter.allCases
 
-    var filteredPosts: [TimelinePost] {
-        // ミュート対象の投稿は常に除外
-        let base = posts.filter { !mutedUids.contains($0.authorId) }
-        guard selectedFilter != .all else { return base }
-        return base.filter { matchesFilter($0, selectedFilter) }
+    /// posts・mutedUids・selectedFilter の変更後に呼び出してキャッシュを更新する
+    private func rebuildFilteredPosts() {
+        let base = mutedUids.isEmpty
+            ? posts
+            : posts.filter { !mutedUids.contains($0.authorId) }
+        if selectedFilter == .all {
+            filteredPosts = base
+        } else {
+            filteredPosts = base.filter { matchesFilter($0, selectedFilter) }
+        }
     }
 
     init () {}
@@ -53,6 +61,7 @@ class TimelineViewModel {
                 lastSnapshot = nil
                 posts.removeAll()
                 knownIds.removeAll()
+                rebuildFilteredPosts() // reset 直後に UI を空状態へ同期（fetch 失敗時も一致を保つ）
             }
             let (models, cursor) = try await postRepo.fetchPosts(
                 roomId: roomId,
@@ -64,6 +73,7 @@ class TimelineViewModel {
             posts.append(contentsOf: newOnes)
             knownIds.formUnion(newOnes.map { $0.id })
             lastSnapshot = cursor
+            rebuildFilteredPosts()
         } catch {
             print("[TimelineViewModel] Error fetching posts: \(error)")
         }
@@ -104,6 +114,7 @@ class TimelineViewModel {
                     newBadgeCount = min(99, newBadgeCount + sorted.count)
                 }
             }
+            rebuildFilteredPosts()
         } catch {
             print("[TimelineViewModel] Error refreshing head: \(error)")
         }
@@ -126,6 +137,7 @@ class TimelineViewModel {
         posts.insert(contentsOf: sorted, at: 0)
         pendingNew.removeAll()
         newBadgeCount = 0
+        rebuildFilteredPosts()
     }
     
     @MainActor
@@ -172,6 +184,7 @@ class TimelineViewModel {
                                 self.newBadgeCount = min(99, self.newBadgeCount + sorted.count)
                             }
                         }
+                        self.rebuildFilteredPosts()
                     }
                 }
             } catch {
@@ -210,6 +223,7 @@ class TimelineViewModel {
         let old = posts[idx]
         posts[idx].isLiked = isLiked
         posts[idx].likeCount = max(0, posts[idx].likeCount + (isLiked ? 1 : -1))
+        rebuildFilteredPosts()
 
         do {
             let newCount = try await postRepo.toggleLike(
@@ -222,11 +236,13 @@ class TimelineViewModel {
             if let j = posts.firstIndex(where: { $0.id == postId }) {
                 posts[j].likeCount = newCount
                 posts[j].isLiked = isLiked
+                rebuildFilteredPosts()
             }
         } catch {
             // 失敗時はロールバック
             if let j = posts.firstIndex(where: { $0.id == postId }) {
                 posts[j] = old
+                rebuildFilteredPosts()
             }
             print("[Like] toggle failed:", error)
         }
@@ -243,6 +259,7 @@ class TimelineViewModel {
             try await postRepo.deletePost(roomId: roomId, postId: postId, authorUid: uid)
             if let idx = posts.firstIndex(where: { $0.id == postId }) {
                 posts.remove(at: idx)
+                rebuildFilteredPosts()
             }
             return true
         } catch {
@@ -264,6 +281,7 @@ class TimelineViewModel {
         knownIds = Set(posts.map { $0.id })
         pendingNew.removeAll(where: { mutedUids.contains($0.authorId) })
         newBadgeCount = min(99, pendingNew.count)
+        rebuildFilteredPosts()
     }
 
     // MARK: - Mute Listening
@@ -296,6 +314,7 @@ class TimelineViewModel {
             // ペンディングも掃除してバッジ更新
             self.pendingNew.removeAll(where: { self.mutedUids.contains($0.authorId) })
             self.newBadgeCount = min(99, self.pendingNew.count)
+            self.rebuildFilteredPosts()
         }
     }
     

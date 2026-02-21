@@ -75,7 +75,7 @@ struct AutoPlayVideoView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let frame = proxy.frame(in: .named("scroll"))
+            let frame = proxy.frame(in: .named("TimelineScroll"))
             ZStack {
                 if let thumbImage {
                     Image(uiImage: thumbImage)
