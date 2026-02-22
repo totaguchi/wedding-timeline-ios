@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+/// TimelineScroll 空間での動画セル中心Y座標を集約する PreferenceKey。
+/// キーは postId、値は各セルの midY。
+/// TimelineView 側で最も中央に近い動画を決めるために使う。
 struct VideoMidYKey: PreferenceKey {
     static var defaultValue: [String: CGFloat] = [:]
 

@@ -166,11 +166,12 @@ struct TimelineView: View {
             Task { model.markAtTop(atTop) }
         }
         .onPreferenceChange(VideoMidYKey.self) { values in
-            updateActiveVideo(from: values)
+            Task { @MainActor in updateActiveVideo(from: values) }
         }
     }
     
     // MARK: - Video Playback
+    @MainActor
     private func updateActiveVideo(from values: [String: CGFloat]) {
         guard !values.isEmpty else {
             if model.activeVideoPostId != nil { model.activeVideoPostId = nil }

@@ -35,6 +35,7 @@ struct MediaView: View {
             PostImagesView(urls: mediaUrls, onTapImageAt: onTapImageAt)
         case .video:
             if let remote = mediaUrls.first {
+                // postId が無い場合（プレビューやBestPostなど）は常に再生対象にする
                 let isActive = (postId != nil) ? (activeVideoPostId == postId) : true
                 AutoPlayVideoView(url: remote, isActive: isActive)
                     .background(

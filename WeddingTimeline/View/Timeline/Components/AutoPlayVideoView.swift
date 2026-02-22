@@ -139,6 +139,24 @@ struct AutoPlayVideoView: View {
                 }
             } else {
                 base
+                    .background(
+                        GeometryReader { proxy in
+                            let frame = proxy.frame(in: .named("TimelineScroll"))
+                            let screenHeight = UIScreen.main.bounds.height
+                            let visibleHeight = max(0, min(frame.maxY, screenHeight) - max(frame.minY, 0))
+                            let ratio = max(0, min(1, visibleHeight / max(frame.height, 1)))
+                            let isVisible = ratio >= 0.5
+                            Color.clear
+                                .onAppear {
+                                    isEligibleForPlayback = isVisible
+                                    Task { @MainActor in updatePlaybackState() }
+                                }
+                                .onChange(of: isVisible) { _, newValue in
+                                    isEligibleForPlayback = newValue
+                                    Task { @MainActor in updatePlaybackState() }
+                                }
+                        }
+                    )
             }
         }
         .contentShape(Rectangle())
@@ -190,7 +208,7 @@ struct AutoPlayVideoView: View {
         guard timeObserver == nil, let player else { return }
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak player] time in
-            guard let player = player else { return }
+            guard let player else { return }
             Task { @MainActor in
                 currentTimeSec = time.seconds
                 updateDurationIfNeeded(from: player.currentItem)

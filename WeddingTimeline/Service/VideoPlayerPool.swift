@@ -8,7 +8,6 @@
 import AVKit
 import Foundation
 
-@Observable
 final class VideoPlayerPool {
     static let shared = VideoPlayerPool()
 
@@ -16,10 +15,14 @@ final class VideoPlayerPool {
     private var idlePlayers: [AVPlayer] = []
     private var inUse: Set<ObjectIdentifier> = []
     private var allPlayers: [AVPlayer] = []
+    private let lock = NSLock()
 
     private init() {}
 
     func acquire() -> AVPlayer {
+        lock.lock()
+        defer { lock.unlock() }
+
         if let player = idlePlayers.popLast() {
             inUse.insert(ObjectIdentifier(player))
             return player
@@ -33,13 +36,14 @@ final class VideoPlayerPool {
             return player
         }
 
-        // Pool is exhausted. Reuse the oldest player instance.
-        let player = allPlayers[0]
-        inUse.insert(ObjectIdentifier(player))
-        return player
+        // Pool is exhausted. Return a non-pooled player to avoid reuse conflicts.
+        return AVPlayer()
     }
 
     func release(_ player: AVPlayer) {
+        lock.lock()
+        defer { lock.unlock() }
+
         let id = ObjectIdentifier(player)
         guard inUse.contains(id) else { return }
         inUse.remove(id)
