@@ -11,6 +11,7 @@ import CryptoKit
 
 struct TimelinePostView: View {
     let model: TimelinePost
+    let activeVideoPostId: String?
     let enableNavigation: Bool
     let onToggleLike: (Bool) -> Void
     let onPostDelete: (@Sendable (String) async -> Bool)
@@ -30,12 +31,14 @@ struct TimelinePostView: View {
     
     init(
         model: TimelinePost,
+        activeVideoPostId: String? = nil,
         enableNavigation: Bool = true,
         onToggleLike: @escaping (Bool) -> Void,
         onPostDelete: @escaping (@Sendable (String) async -> Bool),
         onMuteChanged: ((String, Bool) -> Void)? = nil
     ) {
         self.model = model
+        self.activeVideoPostId = activeVideoPostId
         self.enableNavigation = enableNavigation
         self.onToggleLike = onToggleLike
         self.onPostDelete = onPostDelete
@@ -86,6 +89,8 @@ struct TimelinePostView: View {
                     MediaView(
                         mediaType: mediaType,
                         mediaUrls: mediaURLsForView,
+                        postId: model.id,
+                        activeVideoPostId: activeVideoPostId,
                         onTapImageAt: { idx in
                             galleryStartIndex = idx
                             isGalleryPresented = true

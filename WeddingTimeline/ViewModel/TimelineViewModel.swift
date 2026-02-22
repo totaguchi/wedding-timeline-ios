@@ -36,6 +36,9 @@ class TimelineViewModel {
     }
     let availableFilters: [TimelineFilter] = TimelineFilter.allCases
 
+    // ビデオ再生の一元制御
+    var activeVideoPostId: String? = nil
+
     /// posts・mutedUids・selectedFilter の変更後に呼び出してキャッシュを更新する
     private func rebuildFilteredPosts() {
         let base = mutedUids.isEmpty
