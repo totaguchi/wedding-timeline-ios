@@ -23,7 +23,14 @@ struct CustomVideoPlayerView: UIViewControllerRepresentable {
         vc.canStartPictureInPictureAutomaticallyFromInline = true
         return vc
     }
-    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {}
+    func updateUIViewController(_ vc: AVPlayerViewController, context: Context) {
+        if vc.player !== player {
+            vc.player = player
+        }
+        if vc.showsPlaybackControls != showsPlaybackControls {
+            vc.showsPlaybackControls = showsPlaybackControls
+        }
+    }
 }
 
 #Preview {

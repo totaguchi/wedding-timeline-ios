@@ -53,7 +53,8 @@ struct TimelineView: View {
                                 )
                             ForEach(Array(model.filteredPosts.enumerated()), id: \.element.id) { index, post in
                                 TimelinePostView(
-                                    model: post
+                                    model: post,
+                                    activeVideoPostId: model.activeVideoPostId
                                 ) { isLiked in
                                     guard let roomId = activeRoomId else { return }
                                     Task {
@@ -164,8 +165,31 @@ struct TimelineView: View {
             let atTop = y >= 0
             Task { model.markAtTop(atTop) }
         }
+        .onPreferenceChange(VideoMidYKey.self) { values in
+            Task { @MainActor in updateActiveVideo(from: values) }
+        }
     }
     
+    // MARK: - Video Playback
+    @MainActor
+    private func updateActiveVideo(from values: [String: CGFloat]) {
+        guard !values.isEmpty else {
+            if model.activeVideoPostId != nil { model.activeVideoPostId = nil }
+            return
+        }
+
+        let screenHeight = UIScreen.main.bounds.height
+        let visible = values.filter { $0.value > -100 && $0.value < screenHeight + 100 }
+        guard let best = visible.min(by: { abs($0.value - screenHeight / 2) < abs($1.value - screenHeight / 2) }) else {
+            if model.activeVideoPostId != nil { model.activeVideoPostId = nil }
+            return
+        }
+
+        if model.activeVideoPostId != best.key {
+            model.activeVideoPostId = best.key
+        }
+    }
+
     // MARK: - Image Preheating (Nuke)
     private func preheatInitialWindow(size: Int = 24) {
         guard !model.filteredPosts.isEmpty else { return }

@@ -11,7 +11,23 @@ import SwiftUI
 struct MediaView: View {
     let mediaType: MediaKind
     let mediaUrls: [URL]
+    let postId: String?
+    let activeVideoPostId: String?
     var onTapImageAt: ((Int) -> Void)? = nil
+
+    init(
+        mediaType: MediaKind,
+        mediaUrls: [URL],
+        postId: String? = nil,
+        activeVideoPostId: String? = nil,
+        onTapImageAt: ((Int) -> Void)? = nil
+    ) {
+        self.mediaType = mediaType
+        self.mediaUrls = mediaUrls
+        self.postId = postId
+        self.activeVideoPostId = activeVideoPostId
+        self.onTapImageAt = onTapImageAt
+    }
 
     var body: some View {
         switch mediaType {
@@ -19,7 +35,18 @@ struct MediaView: View {
             PostImagesView(urls: mediaUrls, onTapImageAt: onTapImageAt)
         case .video:
             if let remote = mediaUrls.first {
-                AutoPlayVideoView(url: remote)
+                // postId が無い場合（プレビューやBestPostなど）は常に再生対象にする
+                let isActive = (postId != nil) ? (activeVideoPostId == postId) : true
+                AutoPlayVideoView(url: remote, isActive: isActive)
+                    .background(
+                        GeometryReader { geo in
+                            let midY = geo.frame(in: .named("TimelineScroll")).midY
+                            Color.clear.preference(
+                                key: VideoMidYKey.self,
+                                value: postId.map { [$0: midY] } ?? [:]
+                            )
+                        }
+                    )
             }
         case .unknown:
             EmptyView()

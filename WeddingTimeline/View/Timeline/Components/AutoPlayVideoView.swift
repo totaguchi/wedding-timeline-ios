@@ -47,7 +47,8 @@ private actor TaskLimiter {
 struct AutoPlayVideoView: View {
     let url: URL
     let caption: String?
-    @State private var player: AVPlayer
+    let isActive: Bool
+    @State private var player: AVPlayer?
     @State private var isVisible = false
     @State private var isFullScreenPresented = false
     @State private var isMuted = true
@@ -55,74 +56,116 @@ struct AutoPlayVideoView: View {
     @State private var durationSec: Double = 0
     @State private var timeObserver: Any?
     @State private var isPlayerReady = false
-    @State private var lastVisibilityCheck: CFTimeInterval = 0
+    @State private var isEligibleForPlayback = true
     @State private var thumbImage: UIImage?
     @State private var cachedURL: URL?
     @State private var didPrepareInline = false
     @State private var didPrepareThumb = false
     @State private var didCache = false
     @State private var pendingCachedURL: URL?
+    @State private var statusObserver: NSKeyValueObservation?
+    @State private var keepUpObserver: NSKeyValueObservation?
+    @State private var errorObserver: NSKeyValueObservation?
+    @State private var playRetryTask: Task<Void, Never>?
+    @State private var shouldAutoPlay = false
+    @State private var lastPreparedURL: URL?
+    @State private var didRetryAfterError = false
 
     // グローバルに絞る（同時に大量に走らないように）
-    private static let thumbnailLimiter = TaskLimiter(maxConcurrent: 1)
+    private static let thumbnailLimiter = TaskLimiter(maxConcurrent: 2)
     private static let cacheLimiter = TaskLimiter(maxConcurrent: 1)
 
-    init(url: URL, caption: String? = nil) {
+    init(url: URL, caption: String? = nil, isActive: Bool = true) {
         self.url = url
         self.caption = caption
-        _player = State(initialValue: AVPlayer(url: url))
+        self.isActive = isActive
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let frame = proxy.frame(in: .named("TimelineScroll"))
-            ZStack {
-                if let thumbImage {
-                    Image(uiImage: thumbImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 200)
-                        .clipped()
-                        .cornerRadius(10)
-                }
+        let base = ZStack {
+            if let thumbImage {
+                Image(uiImage: thumbImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 200)
+                    .clipped()
+                    .cornerRadius(10)
+            }
 
+            if let player {
                 CustomVideoPlayerView(player: player, showsPlaybackControls: false)
                     .frame(height: 200)
                     .cornerRadius(10)
                     .allowsHitTesting(false)
                     .opacity(isPlayerReady ? 1 : 0.0001)
-
-                VStack {
-                    Spacer()
-                    HStack {
-                        Text(formatTime(max(0, durationSec - currentTimeSec)))
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.black.opacity(0.5))
-                            .foregroundStyle(TLColor.icoWhite)
-                            .clipShape(Capsule())
-
-                        Spacer()
-
-                        Button(action: {
-                            isMuted.toggle()
-                            player.isMuted = isMuted
-                        }) {
-                            Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(TLColor.icoWhite)
-                                .padding(6)
-                                .background(.black.opacity(0.5))
-                                .clipShape(Circle())
-                        }
-                    }
-                    .padding(8)
-                }
+            } else {
+                Color.clear.frame(height: 200)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { isFullScreenPresented = true }
-            .fullScreenCover(isPresented: $isFullScreenPresented) {
+
+            VStack {
+                Spacer()
+                HStack {
+                    Text(formatTime(max(0, durationSec - currentTimeSec)))
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.5))
+                        .foregroundStyle(TLColor.icoWhite)
+                        .clipShape(Capsule())
+
+                    Spacer()
+
+                    Button(action: {
+                        isMuted.toggle()
+                        player?.isMuted = isMuted
+                    }) {
+                        Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(TLColor.icoWhite)
+                            .padding(6)
+                            .background(.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(8)
+            }
+        }
+
+        Group {
+            if #available(iOS 18.0, *) {
+                base.onScrollVisibilityChange(threshold: 0.5) { isVisible in
+                    isEligibleForPlayback = isVisible
+                    Task { @MainActor in updatePlaybackState() }
+                }
+            } else {
+                base
+                    .background(
+                        GeometryReader { proxy in
+                            let frame = proxy.frame(in: .named("TimelineScroll"))
+                            let screenHeight = UIScreen.main.bounds.height
+                            let visibleHeight = max(0, min(frame.maxY, screenHeight) - max(frame.minY, 0))
+                            let ratio = max(0, min(1, visibleHeight / max(frame.height, 1)))
+                            let isVisible = ratio >= 0.5
+                            Color.clear
+                                .onAppear {
+                                    isEligibleForPlayback = isVisible
+                                    Task { @MainActor in updatePlaybackState() }
+                                }
+                                .onChange(of: isVisible) { _, newValue in
+                                    isEligibleForPlayback = newValue
+                                    Task { @MainActor in updatePlaybackState() }
+                                }
+                        }
+                    )
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Task { @MainActor in ensurePlayer() }
+            isFullScreenPresented = true
+        }
+        .fullScreenCover(isPresented: $isFullScreenPresented) {
+            if let player {
                 FullScreenVideoView(
                     player: player,
                     caption: caption,
@@ -130,80 +173,168 @@ struct AutoPlayVideoView: View {
                     sourceURL: cachedURL ?? url
                 )
             }
-            .onAppear {
-                isMuted = true
-                player.isMuted = true
-                player.automaticallyWaitsToMinimizeStalling = false
-                setupTimeObserver()
-                if !didPrepareInline {
-                    didPrepareInline = true
-                    Task(priority: .utility) { await prepareInlineItem() }
+        }
+        .onAppear {
+            Task { @MainActor in
+                if isActive {
+                    activatePlayer()
                 }
-                if !didPrepareThumb {
-                    didPrepareThumb = true
-                    Task(priority: .utility) { await Self.thumbnailLimiter.withPermit { await prepareThumbnail() } }
-                }
-                if !didCache {
-                    didCache = true
-                    Task(priority: .utility) { await Self.cacheLimiter.withPermit { await cacheRemoteIfNeeded() } }
+                updatePlaybackState()
+            }
+            if !didPrepareThumb {
+                didPrepareThumb = true
+                Task(priority: .background) { await Self.thumbnailLimiter.withPermit { await prepareThumbnail() } }
+            }
+            if !didCache {
+                Task(priority: .background) {
+                    let ok = await Self.cacheLimiter.withPermit { await cacheRemoteIfNeeded() }
+                    await MainActor.run { didCache = ok }
                 }
             }
-            .onChange(of: frame.minY) {
-                updatePlayStatus(frame: frame)
-            }
-            .onDisappear {
-                removeTimeObserver()
-                player.pause()
-                isPlayerReady = false
-            }
+        }
+        .onChange(of: isActive) { _, _ in
+            Task { @MainActor in updatePlaybackState() }
+        }
+        .onChange(of: isEligibleForPlayback) { _, _ in
+            Task { @MainActor in updatePlaybackState() }
+        }
+        .onDisappear {
+            Task { @MainActor in deactivatePlayer() }
         }
         .frame(height: 200)
     }
 
     private func setupTimeObserver() {
-        guard timeObserver == nil else { return }
+        guard timeObserver == nil, let player else { return }
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak player] time in
-            guard let player = player else { return }
-            currentTimeSec = time.seconds
-            
-            updateDurationIfNeeded(from: player.currentItem)
-            if !isPlayerReady { isPlayerReady = player.timeControlStatus != .waitingToPlayAtSpecifiedRate }
+            guard let player else { return }
+            Task { @MainActor in
+                currentTimeSec = time.seconds
+                updateDurationIfNeeded(from: player.currentItem)
+                if !isPlayerReady { isPlayerReady = player.timeControlStatus != .waitingToPlayAtSpecifiedRate }
+            }
         }
     }
 
     private func removeTimeObserver() {
-        if let observer = timeObserver {
+        if let observer = timeObserver, let player {
             player.removeTimeObserver(observer)
+            timeObserver = nil
+        } else {
             timeObserver = nil
         }
     }
 
     private func prepareInlineItem() async {
+        guard let player else { return }
         let playableURL = await resolvedPlaybackURL()
         let item = makeInlineItem(for: playableURL)
         await MainActor.run {
+            lastPreparedURL = playableURL
             cachedURL = (playableURL.isFileURL ? playableURL : cachedURL)
             player.replaceCurrentItem(with: item)
+            observePlayerItem(item)
+            updatePlaybackState()
         }
         await prepareDuration(from: item.asset)
     }
 
-    private func updatePlayStatus(frame: CGRect) {
-        let screenHeight = UIScreen.main.bounds.height
-        let centerThreshold = screenHeight / 2
+    @MainActor
+    private func observePlayerItem(_ item: AVPlayerItem) {
+        statusObserver?.invalidate()
+        keepUpObserver?.invalidate()
+        errorObserver?.invalidate()
 
-        // 過剰な頻度で処理しない（約120ms間隔）
-        let now = CACurrentMediaTime()
-        guard now - lastVisibilityCheck > 0.12 else { return }
-        lastVisibilityCheck = now
-
-        if abs(frame.midY - centerThreshold) < 150 {
-            if !isVisible {
-                player.play()
-                isVisible = true
+        statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak item] _, _ in
+            guard let item else { return }
+            Task { @MainActor in
+                isPlayerReady = (item.status == .readyToPlay)
+                if isPlayerReady { attemptPlaybackIfNeeded() }
             }
+        }
+
+        keepUpObserver = item.observe(\.isPlaybackLikelyToKeepUp, options: [.initial, .new]) { [weak item] _, _ in
+            guard let item else { return }
+            Task { @MainActor in
+                if item.isPlaybackLikelyToKeepUp { attemptPlaybackIfNeeded() }
+            }
+        }
+
+        errorObserver = item.observe(\.error, options: [.initial, .new]) { [weak item] _, _ in
+            guard let item else { return }
+            Task { @MainActor in
+                if let _ = item.error {
+                    if let prepared = lastPreparedURL, prepared.isFileURL, !didRetryAfterError {
+                        didRetryAfterError = true
+                        try? FileManager.default.removeItem(at: prepared)
+                        cachedURL = nil
+                        lastPreparedURL = nil
+                        Task(priority: .utility) { await prepareInlineItem() }
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func cancelItemObservation() {
+        statusObserver?.invalidate()
+        keepUpObserver?.invalidate()
+        errorObserver?.invalidate()
+        statusObserver = nil
+        keepUpObserver = nil
+        errorObserver = nil
+    }
+
+    @MainActor
+    private func ensurePlayer() {
+        if player == nil {
+            activatePlayer()
+        }
+    }
+
+    @MainActor
+    private func activatePlayer() {
+        guard player == nil else { return }
+        let newPlayer = VideoPlayerPool.shared.acquire()
+        player = newPlayer
+        isMuted = true
+        isPlayerReady = false
+        currentTimeSec = 0
+        durationSec = 0
+        newPlayer.isMuted = true
+        newPlayer.automaticallyWaitsToMinimizeStalling = false
+        setupTimeObserver()
+        // Player instance is swapped when re-acquired, so inline item must be prepared again.
+        didPrepareInline = true
+        Task(priority: .utility) { await prepareInlineItem() }
+    }
+
+    @MainActor
+    private func deactivatePlayer() {
+        guard let player else { return }
+        playRetryTask?.cancel()
+        playRetryTask = nil
+        cancelItemObservation()
+        removeTimeObserver()
+        player.pause()
+        isPlayerReady = false
+        isVisible = false
+        shouldAutoPlay = false
+        VideoPlayerPool.shared.release(player)
+        self.player = nil
+    }
+
+    @MainActor
+    private func updatePlaybackState() {
+        let shouldPlay = isActive && isEligibleForPlayback
+        shouldAutoPlay = shouldPlay
+        if shouldPlay {
+            if player == nil { activatePlayer() }
+            attemptPlaybackIfNeeded()
         } else {
+            guard let player else { return }
             if isVisible {
                 player.pause()
                 isVisible = false
@@ -212,9 +343,35 @@ struct AutoPlayVideoView: View {
                     let current = player.currentTime()
                     let item = makeInlineItem(for: pending)
                     player.replaceCurrentItem(with: item)
+                    observePlayerItem(item)
                     player.seek(to: current, toleranceBefore: .zero, toleranceAfter: .zero)
                     cachedURL = pending
                     pendingCachedURL = nil
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func attemptPlaybackIfNeeded() {
+        guard shouldAutoPlay else { return }
+        guard let player else { return }
+        if !isVisible {
+            player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+            player.play()
+            isVisible = true
+        }
+
+        playRetryTask?.cancel()
+        playRetryTask = Task { @MainActor in
+            let retries = 3
+            for _ in 0..<retries {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard shouldAutoPlay, let player = self.player else { return }
+                if player.timeControlStatus != .playing {
+                    player.play()
+                } else {
+                    return
                 }
             }
         }
@@ -243,7 +400,7 @@ struct AutoPlayVideoView: View {
 
     private func prepareDuration(from asset: AVAsset) async {
         let duration: CMTime
-        if #available(iOS 18.0, *) {
+        if #available(iOS 16.0, *) {
             duration = (try? await asset.load(.duration)) ?? .zero
         } else {
             duration = asset.duration
@@ -261,32 +418,54 @@ struct AutoPlayVideoView: View {
         return url
     }
 
-    private func cacheRemoteIfNeeded() async {
+    private func cacheRemoteIfNeeded() async -> Bool {
         // ローカルURLや既存キャッシュはスキップ
-        guard !url.isFileURL, cachedLocalURL(for: url) == nil else { return }
+        guard !url.isFileURL, cachedLocalURL(for: url) == nil else { return false }
         let cacheDir = cacheDirectory()
         let dst = cacheDir.appendingPathComponent(cacheKey(for: url)).appendingPathExtension(url.pathExtension.isEmpty ? "mp4" : url.pathExtension)
         do {
-            let (tmp, _) = try await URLSession.shared.download(from: url)
+            let (tmp, response) = try await URLSession.shared.download(from: url)
+            if let http = response as? HTTPURLResponse {
+                guard (200...299).contains(http.statusCode) else {
+                    try? FileManager.default.removeItem(at: tmp)
+                    return false
+                }
+            }
+            if let mime = response.mimeType, !mime.contains("video") {
+                try? FileManager.default.removeItem(at: tmp)
+                return false
+            }
+            let attrs = try? FileManager.default.attributesOfItem(atPath: tmp.path)
+            let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+            if size < 1024 {
+                try? FileManager.default.removeItem(at: tmp)
+                return false
+            }
+
             try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: dst)
             try FileManager.default.moveItem(at: tmp, to: dst)
 
             // 再生中なら差し替え（現在位置を維持）
-            let current = await MainActor.run { player.currentTime() }
+            let current = await MainActor.run { player?.currentTime() ?? .zero }
             let item = makeInlineItem(for: dst)
             await MainActor.run {
                 if isVisible {
                     // 再生中は差し替えを遅延し、スクロール停止/画面外で適用
                     pendingCachedURL = dst
-                } else {
+                } else if let player {
                     cachedURL = dst
                     player.replaceCurrentItem(with: item)
+                    observePlayerItem(item)
                     player.seek(to: current, toleranceBefore: .zero, toleranceAfter: .zero)
+                } else {
+                    cachedURL = dst
                 }
             }
+            return true
         } catch {
             print("[AutoPlayVideoView] cache download failed:", error)
+            return false
         }
     }
 
