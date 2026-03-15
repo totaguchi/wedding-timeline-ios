@@ -12,6 +12,11 @@ import FirebaseAuth
 
 @Observable
 class TimelineViewModel {
+    private enum TrimSide {
+        case head
+        case tail
+    }
+
     var posts: [TimelinePost] = []
     private(set) var filteredPosts: [TimelinePost] = []
     private let postRepo = PostRepository()
@@ -42,13 +47,47 @@ class TimelineViewModel {
     // ビデオ再生の一元制御
     var activeVideoPostId: String? = nil
 
-    /// メモリ上限（maxPostsInMemory）を超えた場合に末尾の古い投稿を削除し knownIds を同期する
-    private func trimPostsIfNeeded() {
+    /// `posts` と `pendingNew` を合わせた ID セットを再構築する
+    private func rebuildKnownIds() {
+        knownIds = Set(posts.map(\.id))
+        knownIds.formUnion(pendingNew.map(\.id))
+    }
+
+    /// メモリ上限（maxPostsInMemory）を超えた場合に指定方向から投稿を削除する
+    private func trimPostsIfNeeded(removingFrom side: TrimSide) {
         guard posts.count > maxPostsInMemory else { return }
         let removeCount = posts.count - maxPostsInMemory
-        let removed = posts.suffix(removeCount)
-        posts.removeLast(removeCount)
-        removed.forEach { knownIds.remove($0.id) }
+        switch side {
+        case .head:
+            posts.removeFirst(removeCount)
+        case .tail:
+            posts.removeLast(removeCount)
+        }
+        rebuildKnownIds()
+    }
+
+    /// `posts` と `pendingNew` の合計件数が上限を超えたら、まず表示中の投稿を間引き、必要なら新着バッファも削る
+    private func trimMemoryIfNeeded(preferredPostTrimSide: TrimSide) {
+        let overflow = posts.count + pendingNew.count - maxPostsInMemory
+        guard overflow > 0 else { return }
+
+        let removablePosts = min(overflow, posts.count)
+        if removablePosts > 0 {
+            switch preferredPostTrimSide {
+            case .head:
+                posts.removeFirst(removablePosts)
+            case .tail:
+                posts.removeLast(removablePosts)
+            }
+        }
+
+        let pendingOverflow = posts.count + pendingNew.count - maxPostsInMemory
+        if pendingOverflow > 0 {
+            pendingNew.removeLast(min(pendingOverflow, pendingNew.count))
+            newBadgeCount = min(99, pendingNew.count)
+        }
+
+        rebuildKnownIds()
     }
 
     /// posts・mutedUids・selectedFilter の変更後に呼び出してキャッシュを更新する
@@ -75,6 +114,8 @@ class TimelineViewModel {
             if reset {
                 lastSnapshot = nil
                 posts.removeAll()
+                pendingNew.removeAll()
+                newBadgeCount = 0
                 knownIds.removeAll()
                 rebuildFilteredPosts() // reset 直後に UI を空状態へ同期（fetch 失敗時も一致を保つ）
             }
@@ -88,8 +129,8 @@ class TimelineViewModel {
             posts.append(contentsOf: newOnes)
             knownIds.formUnion(newOnes.map { $0.id })
             lastSnapshot = cursor
-            
-            trimPostsIfNeeded()
+
+            trimPostsIfNeeded(removingFrom: .head)
             rebuildFilteredPosts()
         } catch {
             print("[TimelineViewModel] Error fetching posts: \(error)")
@@ -126,10 +167,11 @@ class TimelineViewModel {
                 let sorted = toInsert.sorted { $0.createdAt > $1.createdAt }
                 if isAtTop {
                     posts.insert(contentsOf: sorted, at: 0)
-                    trimPostsIfNeeded()
+                    trimPostsIfNeeded(removingFrom: .tail)
                 } else {
                     pendingNew.append(contentsOf: sorted)
                     newBadgeCount = min(99, newBadgeCount + sorted.count)
+                    trimMemoryIfNeeded(preferredPostTrimSide: .head)
                 }
             }
             rebuildFilteredPosts()
@@ -155,7 +197,7 @@ class TimelineViewModel {
         posts.insert(contentsOf: sorted, at: 0)
         pendingNew.removeAll()
         newBadgeCount = 0
-        trimPostsIfNeeded()
+        trimPostsIfNeeded(removingFrom: .tail)
         rebuildFilteredPosts()
     }
     
@@ -197,12 +239,13 @@ class TimelineViewModel {
                             let sorted = toInsert.sorted { $0.createdAt > $1.createdAt }
                             if self.isAtTop {
                                 self.posts.insert(contentsOf: sorted, at: 0)
-                                
-                                self.trimPostsIfNeeded()
+
+                                self.trimPostsIfNeeded(removingFrom: .tail)
                             } else {
                                 // 先頭にいない時はバッファに積んでバッジカウントを増やす
                                 self.pendingNew.append(contentsOf: sorted)
                                 self.newBadgeCount = min(99, self.newBadgeCount + sorted.count)
+                                self.trimMemoryIfNeeded(preferredPostTrimSide: .head)
                             }
                         }
                         self.rebuildFilteredPosts()
@@ -280,8 +323,11 @@ class TimelineViewModel {
             try await postRepo.deletePost(roomId: roomId, postId: postId, authorUid: uid)
             if let idx = posts.firstIndex(where: { $0.id == postId }) {
                 posts.remove(at: idx)
-                rebuildFilteredPosts()
             }
+            pendingNew.removeAll(where: { $0.id == postId })
+            newBadgeCount = min(99, pendingNew.count)
+            rebuildKnownIds()
+            rebuildFilteredPosts()
             return true
         } catch {
             print("[Delete] failed:", error)
@@ -299,9 +345,9 @@ class TimelineViewModel {
         }
 
         posts.removeAll(where: { mutedUids.contains($0.authorId) })
-        knownIds = Set(posts.map { $0.id })
         pendingNew.removeAll(where: { mutedUids.contains($0.authorId) })
         newBadgeCount = min(99, pendingNew.count)
+        rebuildKnownIds()
         rebuildFilteredPosts()
     }
 
@@ -331,10 +377,10 @@ class TimelineViewModel {
             self.mutedUids = next
             // すでに保持している投稿からも除外・整合
             self.posts.removeAll(where: { self.mutedUids.contains($0.authorId) })
-            self.knownIds = Set(self.posts.map { $0.id })
             // ペンディングも掃除してバッジ更新
             self.pendingNew.removeAll(where: { self.mutedUids.contains($0.authorId) })
             self.newBadgeCount = min(99, self.pendingNew.count)
+            self.rebuildKnownIds()
             self.rebuildFilteredPosts()
         }
     }
