@@ -25,9 +25,10 @@ struct WeddingTimelineApp: App {
     init() {
         FirebaseApp.configure()
         var conf = ImagePipeline.Configuration()
-        // ディスクキャッシュ（永続）
+        
+        // Phase 3-C: ディスクキャッシュサイズを 300MB に増加
         if let dataCache = try? DataCache(name: "ImageDataCache") {
-            dataCache.sizeLimit = 200 * 1024 * 1024  // 200MB 目安（bytes）
+            dataCache.sizeLimit = 300 * 1024 * 1024  // 300MB 目安（bytes）
             conf.dataCache = dataCache               // プロトコル型に代入
         }
 
@@ -36,6 +37,9 @@ struct WeddingTimelineApp: App {
 
         // レートリミッタは引き続き有効化可（12.x で存続）
         conf.isRateLimiterEnabled = true
+        
+        // Phase 3-C: プログレッシブJPEG表示を有効化
+        conf.isProgressiveDecodingEnabled = true
 
         // Nuke 12 では重複ダウンロードの排除は常時有効化に寄ったため、
         // `isDeduplicationEnabled` は削除されています。

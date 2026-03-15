@@ -16,13 +16,12 @@ struct TimelinePostView: View {
     let onToggleLike: (Bool) -> Void
     let onPostDelete: (@Sendable (String) async -> Bool)
     let onMuteChanged: ((String, Bool) -> Void)?
+    // Phase 3-B: 画像タップ時のコールバック（fullScreenCover 一本化）
+    let onImageTap: (([URL], Int) -> Void)?
     let icons = [
         "oomimigitsune", "lesser_panda", "bear",
         "todo", "musasabi", "rakko"
     ]
-    @State private var galleryStartIndex = 0
-    @State private var isGalleryPresented = false
-    @State private var likeBusy = false
     @Environment(Session.self) private var session
     
     // 表示タグ設定（常時 username の後ろに @xxxx を付ける）
@@ -35,7 +34,8 @@ struct TimelinePostView: View {
         enableNavigation: Bool = true,
         onToggleLike: @escaping (Bool) -> Void,
         onPostDelete: @escaping (@Sendable (String) async -> Bool),
-        onMuteChanged: ((String, Bool) -> Void)? = nil
+        onMuteChanged: ((String, Bool) -> Void)? = nil,
+        onImageTap: (([URL], Int) -> Void)? = nil
     ) {
         self.model = model
         self.activeVideoPostId = activeVideoPostId
@@ -43,6 +43,7 @@ struct TimelinePostView: View {
         self.onToggleLike = onToggleLike
         self.onPostDelete = onPostDelete
         self.onMuteChanged = onMuteChanged
+        self.onImageTap = onImageTap
     }
     
     var body: some View {
@@ -92,17 +93,10 @@ struct TimelinePostView: View {
                         postId: model.id,
                         activeVideoPostId: activeVideoPostId,
                         onTapImageAt: { idx in
-                            galleryStartIndex = idx
-                            isGalleryPresented = true
-                            debugPrint(model.id)
+                            // Phase 3-B: 画像タップ時に親に通知（fullScreenCover 一本化）
+                            onImageTap?(imageURLs, idx)
                         }
                     )
-                    .fullScreenCover(isPresented: $isGalleryPresented) {
-                        ImageGalleryView(
-                            urls: imageURLs,
-                            startIndex: galleryStartIndex
-                        )
-                    }
                 }
                 HStack(spacing: 30) {
                     // TODO: コメント機能は未定
@@ -111,13 +105,9 @@ struct TimelinePostView: View {
 //                        Text("\(model.replyCount)")
 //                    }
                     Button {
-                        guard !likeBusy else { return }
-                        likeBusy = true
+                        // Phase 3-B: likeBusy を削除し、ViewModel の likeInFlight に委譲
                         let newValue = !model.isLiked
-                        Task { @MainActor in
-                            onToggleLike(newValue)
-                            likeBusy = false
-                        }
+                        onToggleLike(newValue)
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: model.isLiked ? "heart.fill" : "heart")
@@ -129,7 +119,6 @@ struct TimelinePostView: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
-                    .disabled(likeBusy)
                 }
                 .font(.subheadline)
             }
