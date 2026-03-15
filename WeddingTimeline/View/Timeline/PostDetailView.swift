@@ -25,6 +25,11 @@ struct PostDetailView: View {
     @State private var isDeleting = false
     @State private var deleteError: String?
     @State private var isMuted = false
+    
+    // Phase 3-B: 画像ギャラリー用の状態
+    @State private var galleryURLs: [URL] = []
+    @State private var galleryStartIndex = 0
+    @State private var isGalleryPresented = false
 
     private let reportReasons: [String] = ["スパム/宣伝", "不適切な表現", "プライバシーの侵害", "その他"]
     private let postRepo = PostRepository()
@@ -99,9 +104,25 @@ struct PostDetailView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                TimelinePostView(model: model, enableNavigation: false, onToggleLike: onToggleLike, onPostDelete: onPostDelete)
+                TimelinePostView(
+                    model: model, 
+                    enableNavigation: false, 
+                    onToggleLike: onToggleLike, 
+                    onPostDelete: onPostDelete,
+                    onImageTap: { urls, startIndex in
+                        galleryURLs = urls
+                        galleryStartIndex = startIndex
+                        isGalleryPresented = true
+                    }
+                )
             }
             .padding()
+        }
+        .fullScreenCover(isPresented: $isGalleryPresented) {
+            ImageGalleryView(
+                urls: galleryURLs,
+                startIndex: galleryStartIndex
+            )
         }
         .navigationTitle("ポスト")
         .navigationBarTitleDisplayMode(.inline)

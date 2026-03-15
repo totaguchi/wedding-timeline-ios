@@ -22,6 +22,11 @@ struct TimelineView: View {
     @State private var isShowingCreateView = false
     @State private var prefetcher = ImagePrefetcher()
     
+    // Phase 3-B: fullScreenCover を一本化
+    @State private var galleryURLs: [URL] = []
+    @State private var galleryStartIndex = 0
+    @State private var isGalleryPresented = false
+    
     private var activeRoomId: String? {
         let id = session.currentRoomId.trimmingCharacters(in: .whitespacesAndNewlines)
         return id.isEmpty ? nil : id
@@ -68,6 +73,11 @@ struct TimelineView: View {
                                     Task { @MainActor in
                                         model.applyMuteChange(targetUid: targetUid, isMuted: isMuted)
                                     }
+                                } onImageTap: { urls, startIndex in
+                                    // Phase 3-B: 画像タップ時に親でギャラリーを表示
+                                    galleryURLs = urls
+                                    galleryStartIndex = startIndex
+                                    isGalleryPresented = true
                                 }
                                 .padding(.horizontal, 10)
                                 .onAppear {
@@ -118,6 +128,13 @@ struct TimelineView: View {
                     PostCreateView(roomId: roomId)
                         .toolbar(.hidden, for: .tabBar) // Hide tab bar while the full-screen cover is shown
                 }
+            }
+            // Phase 3-B: 画像ギャラリーの fullScreenCover を一本化
+            .fullScreenCover(isPresented: $isGalleryPresented) {
+                ImageGalleryView(
+                    urls: galleryURLs,
+                    startIndex: galleryStartIndex
+                )
             }
         }
         .refreshable {
