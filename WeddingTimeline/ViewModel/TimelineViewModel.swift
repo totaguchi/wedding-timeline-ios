@@ -42,6 +42,15 @@ class TimelineViewModel {
     // ビデオ再生の一元制御
     var activeVideoPostId: String? = nil
 
+    /// メモリ上限（maxPostsInMemory）を超えた場合に末尾の古い投稿を削除し knownIds を同期する
+    private func trimPostsIfNeeded() {
+        guard posts.count > maxPostsInMemory else { return }
+        let removeCount = posts.count - maxPostsInMemory
+        let removed = posts.suffix(removeCount)
+        posts.removeLast(removeCount)
+        removed.forEach { knownIds.remove($0.id) }
+    }
+
     /// posts・mutedUids・selectedFilter の変更後に呼び出してキャッシュを更新する
     private func rebuildFilteredPosts() {
         let base = mutedUids.isEmpty
@@ -80,15 +89,7 @@ class TimelineViewModel {
             knownIds.formUnion(newOnes.map { $0.id })
             lastSnapshot = cursor
             
-            // Phase 3-A: メモリ上限を適用（古い投稿を末尾から削除）
-            if posts.count > maxPostsInMemory {
-                let removeCount = posts.count - maxPostsInMemory
-                let removed = posts.suffix(removeCount)
-                posts.removeLast(removeCount)
-                // 削除された投稿のIDをknownIdsから除外
-                removed.forEach { knownIds.remove($0.id) }
-            }
-            
+            trimPostsIfNeeded()
             rebuildFilteredPosts()
         } catch {
             print("[TimelineViewModel] Error fetching posts: \(error)")
@@ -125,14 +126,7 @@ class TimelineViewModel {
                 let sorted = toInsert.sorted { $0.createdAt > $1.createdAt }
                 if isAtTop {
                     posts.insert(contentsOf: sorted, at: 0)
-                    
-                    // Phase 3-A: メモリ上限を適用（古い投稿を末尾から削除）
-                    if posts.count > maxPostsInMemory {
-                        let removeCount = posts.count - maxPostsInMemory
-                        let removed = posts.suffix(removeCount)
-                        posts.removeLast(removeCount)
-                        removed.forEach { knownIds.remove($0.id) }
-                    }
+                    trimPostsIfNeeded()
                 } else {
                     pendingNew.append(contentsOf: sorted)
                     newBadgeCount = min(99, newBadgeCount + sorted.count)
@@ -161,15 +155,7 @@ class TimelineViewModel {
         posts.insert(contentsOf: sorted, at: 0)
         pendingNew.removeAll()
         newBadgeCount = 0
-        
-        // Phase 3-A: メモリ上限を適用（古い投稿を末尾から削除）
-        if posts.count > maxPostsInMemory {
-            let removeCount = posts.count - maxPostsInMemory
-            let removed = posts.suffix(removeCount)
-            posts.removeLast(removeCount)
-            removed.forEach { knownIds.remove($0.id) }
-        }
-        
+        trimPostsIfNeeded()
         rebuildFilteredPosts()
     }
     
@@ -212,13 +198,7 @@ class TimelineViewModel {
                             if self.isAtTop {
                                 self.posts.insert(contentsOf: sorted, at: 0)
                                 
-                                // Phase 3-A: メモリ上限を適用（古い投稿を末尾から削除）
-                                if self.posts.count > self.maxPostsInMemory {
-                                    let removeCount = self.posts.count - self.maxPostsInMemory
-                                    let removed = self.posts.suffix(removeCount)
-                                    self.posts.removeLast(removeCount)
-                                    removed.forEach { self.knownIds.remove($0.id) }
-                                }
+                                self.trimPostsIfNeeded()
                             } else {
                                 // 先頭にいない時はバッファに積んでバッジカウントを増やす
                                 self.pendingNew.append(contentsOf: sorted)
