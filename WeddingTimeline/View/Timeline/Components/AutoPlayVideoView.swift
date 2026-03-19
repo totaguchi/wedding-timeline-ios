@@ -362,6 +362,9 @@ struct AutoPlayVideoView: View {
             isVisible = true
         }
 
+        // すでに再生中なら retry task は不要
+        if player.timeControlStatus == .playing { return }
+
         playRetryTask?.cancel()
         playRetryTask = Task { @MainActor in
             let retries = 3
