@@ -9,6 +9,12 @@ import SwiftUI
 import FirebaseAuth
 
 struct PostDetailView: View {
+    private struct GalleryPayload: Identifiable {
+        let id = UUID()
+        let urls: [URL]
+        let startIndex: Int
+    }
+
     let model: TimelinePost
     let onToggleLike: (Bool) -> Void
     /// 親（TimelineView / ViewModel）に削除処理を委譲するためのコールバック（省略可）
@@ -26,10 +32,8 @@ struct PostDetailView: View {
     @State private var deleteError: String?
     @State private var isMuted = false
     
-    // Phase 3-B: 画像ギャラリー用の状態
-    @State private var galleryURLs: [URL] = []
-    @State private var galleryStartIndex = 0
-    @State private var isGalleryPresented = false
+    // ギャラリー表示トリガーとデータを一体化してレースを回避
+    @State private var galleryPayload: GalleryPayload?
 
     private let reportReasons: [String] = ["スパム/宣伝", "不適切な表現", "プライバシーの侵害", "その他"]
     private let postRepo = PostRepository()
@@ -110,18 +114,20 @@ struct PostDetailView: View {
                     onToggleLike: onToggleLike, 
                     onPostDelete: onPostDelete,
                     onImageTap: { urls, startIndex in
-                        galleryURLs = urls
-                        galleryStartIndex = startIndex
-                        isGalleryPresented = true
+                        guard !urls.isEmpty else { return }
+                        galleryPayload = GalleryPayload(
+                            urls: urls,
+                            startIndex: startIndex
+                        )
                     }
                 )
             }
             .padding()
         }
-        .fullScreenCover(isPresented: $isGalleryPresented) {
+        .fullScreenCover(item: $galleryPayload) { payload in
             ImageGalleryView(
-                urls: galleryURLs,
-                startIndex: galleryStartIndex
+                urls: payload.urls,
+                startIndex: payload.startIndex
             )
         }
         .navigationTitle("ポスト")
