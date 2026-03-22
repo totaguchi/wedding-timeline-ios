@@ -39,13 +39,10 @@ class TimelineViewModel {
     var isAtTop: Bool = true
 
     // フィルター（上部チップ/タブ）
-    var selectedFilter: TimelineFilter = .all {
+    private(set) var selectedFilter: TimelineFilter = .all {
         didSet { rebuildFilteredPosts() }
     }
     let availableFilters: [TimelineFilter] = TimelineFilter.allCases
-
-    // ビデオ再生の一元制御
-    var activeVideoPostId: String? = nil
 
     /// `posts` と `pendingNew` を合わせた ID セットを再構築する
     private func rebuildKnownIds() {
@@ -268,6 +265,29 @@ class TimelineViewModel {
     @MainActor
     func revealPending() {
         consumePending()
+    }
+
+    @MainActor
+    func setSelectedFilter(_ filter: TimelineFilter) {
+        selectedFilter = filter
+    }
+
+    @MainActor
+    func isMuted(authorId: String) -> Bool {
+        mutedUids.contains(authorId)
+    }
+
+    @MainActor
+    func setMute(roomId: String, targetUid: String, mute: Bool) async -> Bool {
+        guard let uid = Auth.auth().currentUser?.uid else { return false }
+        do {
+            try await postRepo.setMute(roomId: roomId, targetUid: targetUid, by: uid, mute: mute)
+            applyMuteChange(targetUid: targetUid, isMuted: mute)
+            return true
+        } catch {
+            print("[Mute] set failed:", error)
+            return false
+        }
     }
     
     @MainActor

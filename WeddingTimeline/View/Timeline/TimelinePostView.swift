@@ -12,10 +12,12 @@ import CryptoKit
 struct TimelinePostView: View {
     let model: TimelinePost
     let activeVideoPostId: String?
+    let isMutedByViewer: Bool
     let enableNavigation: Bool
     let onToggleLike: (Bool) -> Void
     let onPostDelete: (@Sendable (String) async -> Bool)
     let onMuteChanged: ((String, Bool) -> Void)?
+    let onSetMute: (@Sendable (String, Bool) async -> Bool)?
     // Phase 3-B: 画像タップ時のコールバック（fullScreenCover 一本化）
     let onImageTap: (([URL], Int) -> Void)?
     let icons = [
@@ -31,18 +33,22 @@ struct TimelinePostView: View {
     init(
         model: TimelinePost,
         activeVideoPostId: String? = nil,
+        isMutedByViewer: Bool = false,
         enableNavigation: Bool = true,
         onToggleLike: @escaping (Bool) -> Void,
         onPostDelete: @escaping (@Sendable (String) async -> Bool),
         onMuteChanged: ((String, Bool) -> Void)? = nil,
+        onSetMute: (@Sendable (String, Bool) async -> Bool)? = nil,
         onImageTap: (([URL], Int) -> Void)? = nil
     ) {
         self.model = model
         self.activeVideoPostId = activeVideoPostId
+        self.isMutedByViewer = isMutedByViewer
         self.enableNavigation = enableNavigation
         self.onToggleLike = onToggleLike
         self.onPostDelete = onPostDelete
         self.onMuteChanged = onMuteChanged
+        self.onSetMute = onSetMute
         self.onImageTap = onImageTap
     }
     
@@ -65,9 +71,11 @@ struct TimelinePostView: View {
                     NavigationLink {
                         PostDetailView(
                             model: model,
+                            isMutedByViewer: isMutedByViewer,
                             onToggleLike: onToggleLike,
                             onPostDelete: onPostDelete,
-                            onMuteChanged: onMuteChanged
+                            onMuteChanged: onMuteChanged,
+                            onSetMute: onSetMute
                         )
                     } label: {
                         headerAndContent
