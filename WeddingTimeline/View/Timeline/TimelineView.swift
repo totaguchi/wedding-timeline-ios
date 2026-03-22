@@ -17,15 +17,19 @@ private struct TLScrollTopKey: PreferenceKey {
 }
 
 struct TimelineView: View {
+    private struct GalleryPayload: Identifiable {
+        let id = UUID()
+        let urls: [URL]
+        let startIndex: Int
+    }
+
     @Environment(Session.self) private var session
     @State private var model = TimelineViewModel()
     @State private var isShowingCreateView = false
     @State private var prefetcher = ImagePrefetcher()
     
-    // Phase 3-B: fullScreenCover を一本化
-    @State private var galleryURLs: [URL] = []
-    @State private var galleryStartIndex = 0
-    @State private var isGalleryPresented = false
+    // ギャラリー表示トリガーとデータを一体化してレースを回避
+    @State private var galleryPayload: GalleryPayload?
     
     private var activeRoomId: String? {
         let id = session.currentRoomId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -74,10 +78,11 @@ struct TimelineView: View {
                                         model.applyMuteChange(targetUid: targetUid, isMuted: isMuted)
                                     }
                                 } onImageTap: { urls, startIndex in
-                                    // Phase 3-B: 画像タップ時に親でギャラリーを表示
-                                    galleryURLs = urls
-                                    galleryStartIndex = startIndex
-                                    isGalleryPresented = true
+                                    guard !urls.isEmpty else { return }
+                                    galleryPayload = GalleryPayload(
+                                        urls: urls,
+                                        startIndex: startIndex
+                                    )
                                 }
                                 .padding(.horizontal, 10)
                                 .onAppear {
@@ -129,11 +134,10 @@ struct TimelineView: View {
                         .toolbar(.hidden, for: .tabBar) // Hide tab bar while the full-screen cover is shown
                 }
             }
-            // Phase 3-B: 画像ギャラリーの fullScreenCover を一本化
-            .fullScreenCover(isPresented: $isGalleryPresented) {
+            .fullScreenCover(item: $galleryPayload) { payload in
                 ImageGalleryView(
-                    urls: galleryURLs,
-                    startIndex: galleryStartIndex
+                    urls: payload.urls,
+                    startIndex: payload.startIndex
                 )
             }
         }

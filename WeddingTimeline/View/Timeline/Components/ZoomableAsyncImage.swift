@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import NukeUI
 
 struct ZoomableAsyncImage: View {
     let url: URL
@@ -14,6 +15,7 @@ struct ZoomableAsyncImage: View {
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
+    @State private var reloadToken = UUID()
 
     var body: some View {
         GeometryReader { geo in
@@ -30,12 +32,8 @@ struct ZoomableAsyncImage: View {
                 }
             }
 
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .empty:
-                    ZStack { Color.black; ProgressView() }
-                        .frame(width: geo.size.width, height: geo.size.height)
-                case .success(let image):
+            LazyImage(url: url) { state in
+                if let image = state.image {
                     image
                         .resizable()
                         .scaledToFit()
@@ -82,16 +80,29 @@ struct ZoomableAsyncImage: View {
                                 }
                         )
                         .gesture(doubleTap)
-                case .failure:
-                    Image(systemName: "photo")
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundStyle(TLColor.icoAction)
+                } else if let error = state.error {
+                    VStack(spacing: 12) {
+                        Image(systemName: "photo")
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundStyle(TLColor.icoAction)
+                            .frame(maxWidth: geo.size.width * 0.35)
+                        Button("再読み込み") {
+                            print("[Gallery] retry url=\(url)")
+                            reloadToken = UUID()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .onAppear {
+                        print("[Gallery] image load failed url=\(url) error=\(error)")
+                    }
+                } else {
+                    ZStack { Color.black; ProgressView() }
                         .frame(width: geo.size.width, height: geo.size.height)
-                @unknown default:
-                    EmptyView()
                 }
             }
+            .id(reloadToken)
             .background(Color.black)
             .ignoresSafeArea()
         }

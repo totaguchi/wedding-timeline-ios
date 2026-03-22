@@ -19,20 +19,37 @@ struct ImageGalleryView: View {
     @State private var isPreparingShare: Bool = false
     @State private var sharePayload: SharePayload?
     @Environment(\.dismiss) private var dismiss
+    
+    private var displayableURLs: [URL] {
+        urls.filter { url in
+            if url.isFileURL { return true }
+            guard let scheme = url.scheme?.lowercased() else { return false }
+            return scheme == "http" || scheme == "https"
+        }
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-
-            TabView(selection: $index) {
-                ForEach(Array(urls.enumerated()), id: \.offset) { idx, url in
-                    ZoomableAsyncImage(url: url)
-                        .tag(idx)
+            
+            if displayableURLs.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 36))
+                        .foregroundStyle(TLColor.icoAction)
+                    Text("表示できる画像がありません")
+                        .font(.callout)
+                        .foregroundStyle(TLColor.icoWhite)
                 }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .automatic))
-            .onAppear {
-                index = min(max(0, startIndex), max(0, urls.count - 1))
+                .padding()
+            } else {
+                TabView(selection: $index) {
+                    ForEach(Array(displayableURLs.enumerated()), id: \.offset) { idx, url in
+                        ZoomableAsyncImage(url: url)
+                            .tag(idx)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
             }
 
             // ヘッダー（閉じる + ダウンロードボタン）
@@ -52,8 +69,9 @@ struct ImageGalleryView: View {
                     
                     Button {
                         Task {
-                            let i = min(max(0, index), max(0, urls.count - 1))
-                            await shareCurrentImage(url: urls[i])
+                            guard !displayableURLs.isEmpty else { return }
+                            let i = min(max(0, index), max(0, displayableURLs.count - 1))
+                            await shareCurrentImage(url: displayableURLs[i])
                         }
                     } label: {
                         if isPreparingShare {
@@ -67,7 +85,7 @@ struct ImageGalleryView: View {
                                 .padding(8)
                         }
                     }
-                    .disabled(isDownloading || isPreparingShare)
+                    .disabled(isDownloading || isPreparingShare || displayableURLs.isEmpty)
                     .accessibilityLabel("共有")
                 }
                 .padding()
@@ -93,6 +111,12 @@ struct ImageGalleryView: View {
         .sheet(item: $sharePayload) { payload in
             ActivityView(activityItems: [payload.item])
                 .ignoresSafeArea()
+        }
+        .onAppear {
+            if urls.count != displayableURLs.count {
+                print("[Gallery] filtered invalid urls total=\(urls.count) valid=\(displayableURLs.count)")
+            }
+            index = min(max(0, startIndex), max(0, displayableURLs.count - 1))
         }
     }
     
