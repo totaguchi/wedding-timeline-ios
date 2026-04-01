@@ -9,7 +9,7 @@ import SwiftUI
 import AVKit
 
 struct BestPostView: View {
-    @Environment(Session.self) private var session
+    @Environment(SessionStore.self) private var session
     @State private var vm = BestPostViewModel()
     
     private var activeRoomId: String? {

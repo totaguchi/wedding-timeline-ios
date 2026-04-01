@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct LoginView: View {
-    @Environment(Session.self) private var session
+    @Environment(SessionStore.self) private var session
     @State private var vm = LoginViewModel()
     @State private var showAvatarPicker = false
 

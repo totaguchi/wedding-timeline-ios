@@ -11,7 +11,7 @@ import Network
 
 struct SettingView: View {
     // Session は signOut() のみ確実に存在する前提で参照
-    @Environment(Session.self) var session: Session
+    @Environment(SessionStore.self) var session: SessionStore
 
     @State private var showLogoutAlert = false
     @State private var showDeleteAlert = false

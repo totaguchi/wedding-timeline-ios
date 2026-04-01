@@ -26,7 +26,7 @@ struct PostDetailView: View {
     /// ミュート変更処理（ViewModel 側の真実源）を親に委譲
     let onSetMute: (@Sendable (String, Bool) async -> Bool)?
 
-    @Environment(Session.self) private var session
+    @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
 
     @State private var showReportDone = false
