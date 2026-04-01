@@ -107,7 +107,8 @@ struct FullScreenVideoView: View {
                                     if editing {
                                         player.pause()
                                     } else {
-                                        seek(to: currentTimeSec) {
+                                        Task {
+                                            await seek(to: currentTimeSec)
                                             if isPlaying { player.play() }
                                         }
                                     }
@@ -201,11 +202,9 @@ struct FullScreenVideoView: View {
         isPlaying.toggle()
     }
 
-    private func seek(to seconds: Double, completion: (() -> Void)? = nil) {
+    private func seek(to seconds: Double) async {
         let time = CMTime(seconds: seconds, preferredTimescale: 600)
-        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
-            DispatchQueue.main.async { completion?() }
-        }
+        _ = await player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     private func formatTime(_ seconds: Double) -> String {
@@ -222,7 +221,8 @@ struct FullScreenVideoView: View {
         let item = AVPlayerItem(url: url)
         item.preferredForwardBufferDuration = 0 // デフォルト
         player.replaceCurrentItem(with: item)
-        seek(to: current.seconds) {
+        Task {
+            await seek(to: current.seconds)
             if isPlaying { player.play() }
         }
     }
