@@ -16,12 +16,15 @@ struct PostDetailView: View {
     }
 
     let model: TimelinePost
+    let isMutedByViewer: Bool
     let onToggleLike: (Bool) -> Void
     /// 親（TimelineView / ViewModel）に削除処理を委譲するためのコールバック（省略可）
     /// - Returns: 成功したら true
     let onPostDelete: (@Sendable (String) async -> Bool)
     /// ミュート状態が変わったら親に通知（省略可）
     let onMuteChanged: ((String, Bool) -> Void)?
+    /// ミュート変更処理（ViewModel 側の真実源）を親に委譲
+    let onSetMute: (@Sendable (String, Bool) async -> Bool)?
 
     @Environment(Session.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -37,6 +40,23 @@ struct PostDetailView: View {
 
     private let reportReasons: [String] = ["スパム/宣伝", "不適切な表現", "プライバシーの侵害", "その他"]
     private let postRepo = PostRepository()
+
+    init(
+        model: TimelinePost,
+        isMutedByViewer: Bool,
+        onToggleLike: @escaping (Bool) -> Void,
+        onPostDelete: @escaping (@Sendable (String) async -> Bool),
+        onMuteChanged: ((String, Bool) -> Void)? = nil,
+        onSetMute: (@Sendable (String, Bool) async -> Bool)? = nil
+    ) {
+        self.model = model
+        self.isMutedByViewer = isMutedByViewer
+        self.onToggleLike = onToggleLike
+        self.onPostDelete = onPostDelete
+        self.onMuteChanged = onMuteChanged
+        self.onSetMute = onSetMute
+        _isMuted = State(initialValue: isMutedByViewer)
+    }
 
     private func reportToFirestore(reason: String) {
         guard let uid = Auth.auth().currentUser?.uid else {
@@ -58,31 +78,15 @@ struct PostDetailView: View {
     }
     
     @MainActor
-    private func loadMuteState() {
-        guard let uid = Auth.auth().currentUser?.uid, !session.currentRoomId.isEmpty else { return }
-        Task {
-            do {
-                let muted = try await postRepo.isMuted(roomId: session.currentRoomId, targetUid: model.authorId, by: uid)
-                await MainActor.run { self.isMuted = muted }
-            } catch {
-                print("[Mute] check failed:", error)
-            }
-        }
-    }
-    
-    @MainActor
     private func toggleMuteUser() {
-        guard let uid = Auth.auth().currentUser?.uid, !session.currentRoomId.isEmpty else { return }
+        guard let onSetMute else { return }
         let next = !isMuted
         Task {
-            do {
-                try await postRepo.setMute(roomId: session.currentRoomId, targetUid: model.authorId, by: uid, mute: next)
+            let ok = await onSetMute(model.authorId, next)
+            if ok {
                 await MainActor.run {
                     self.isMuted = next
-                    onMuteChanged?(model.authorId, next)
                 }
-            } catch {
-                print("[Mute] set failed:", error)
             }
         }
     }
@@ -197,9 +201,6 @@ struct PostDetailView: View {
                     )
                 }
             }
-        }
-        .task {
-            loadMuteState()
         }
     }
 }

@@ -27,6 +27,7 @@ struct TimelineView: View {
     @State private var model = TimelineViewModel()
     @State private var isShowingCreateView = false
     @State private var prefetcher = ImagePrefetcher()
+    @State private var activeVideoPostId: String?
     
     // ギャラリー表示トリガーとデータを一体化してレースを回避
     @State private var galleryPayload: GalleryPayload?
@@ -40,7 +41,12 @@ struct TimelineView: View {
         ScrollViewReader { proxy in
             NavigationStack {
                 VStack(spacing: 0) {
-                    CategoryFilterBar(vm: model)
+                    CategoryFilterBar(
+                        filters: model.availableFilters,
+                        selectedFilter: model.selectedFilter
+                    ) { filter in
+                        model.setSelectedFilter(filter)
+                    }
                     
                     Rectangle()
                         .frame(height: 1)
@@ -61,45 +67,7 @@ struct TimelineView: View {
                                     }
                                 )
                             ForEach(Array(model.filteredPosts.enumerated()), id: \.element.id) { index, post in
-                                TimelinePostView(
-                                    model: post,
-                                    activeVideoPostId: model.activeVideoPostId
-                                ) { isLiked in
-                                    guard let roomId = activeRoomId else { return }
-                                    Task {
-                                        await model.toggleLike(model: post, roomId: roomId, isLiked: isLiked)
-                                    }
-                                } onPostDelete: { postId in
-                                    let roomId = await MainActor.run { activeRoomId }
-                                    guard let roomId else { return false }
-                                    return await model.deletePost(roomId: roomId, postId: postId)
-                                } onMuteChanged: { targetUid, isMuted in
-                                    Task { @MainActor in
-                                        model.applyMuteChange(targetUid: targetUid, isMuted: isMuted)
-                                    }
-                                } onImageTap: { urls, startIndex in
-                                    guard !urls.isEmpty else { return }
-                                    galleryPayload = GalleryPayload(
-                                        urls: urls,
-                                        startIndex: startIndex
-                                    )
-                                }
-                                .padding(.horizontal, 10)
-                                .onAppear {
-                                    if index == model.filteredPosts.count - 1 {
-                                        guard let roomId = activeRoomId else { return }
-                                        Task { await model.fetchPosts(roomId: roomId) }
-                                    }
-                                    preheatAround(index: index, ahead: 12)
-                                }
-                                .onDisappear {
-                                    cancelPreheatAround(index: index, ahead: 20)
-                                }
-                                if index < model.filteredPosts.count - 1 {
-                                    Rectangle()
-                                        .frame(height: 1)
-                                        .foregroundStyle(TLColor.borderCard.opacity(0.15))
-                                }
+                                postRow(post: post, index: index)
                             }
                         }
                     }
@@ -195,19 +163,67 @@ struct TimelineView: View {
     @MainActor
     private func updateActiveVideo(from values: [String: CGFloat]) {
         guard !values.isEmpty else {
-            if model.activeVideoPostId != nil { model.activeVideoPostId = nil }
+            if activeVideoPostId != nil { activeVideoPostId = nil }
             return
         }
 
         let screenHeight = UIScreen.main.bounds.height
         let visible = values.filter { $0.value > -100 && $0.value < screenHeight + 100 }
         guard let best = visible.min(by: { abs($0.value - screenHeight / 2) < abs($1.value - screenHeight / 2) }) else {
-            if model.activeVideoPostId != nil { model.activeVideoPostId = nil }
+            if activeVideoPostId != nil { activeVideoPostId = nil }
             return
         }
 
-        if model.activeVideoPostId != best.key {
-            model.activeVideoPostId = best.key
+        if activeVideoPostId != best.key {
+            activeVideoPostId = best.key
+        }
+    }
+
+    @ViewBuilder
+    private func postRow(post: TimelinePost, index: Int) -> some View {
+        TimelinePostView(
+            model: post,
+            activeVideoPostId: activeVideoPostId,
+            isMutedByViewer: model.isMuted(authorId: post.authorId)
+        ) { isLiked in
+            guard let roomId = activeRoomId else { return }
+            Task {
+                await model.toggleLike(model: post, roomId: roomId, isLiked: isLiked)
+            }
+        } onPostDelete: { postId in
+            let roomId = await MainActor.run { activeRoomId }
+            guard let roomId else { return false }
+            return await model.deletePost(roomId: roomId, postId: postId)
+        } onMuteChanged: { targetUid, isMuted in
+            Task { @MainActor in
+                model.applyMuteChange(targetUid: targetUid, isMuted: isMuted)
+            }
+        } onSetMute: { targetUid, mute in
+            let roomId = await MainActor.run { activeRoomId }
+            guard let roomId else { return false }
+            return await model.setMute(roomId: roomId, targetUid: targetUid, mute: mute)
+        } onImageTap: { urls, startIndex in
+            guard !urls.isEmpty else { return }
+            galleryPayload = GalleryPayload(
+                urls: urls,
+                startIndex: startIndex
+            )
+        }
+        .padding(.horizontal, 10)
+        .onAppear {
+            if index == model.filteredPosts.count - 1 {
+                guard let roomId = activeRoomId else { return }
+                Task { await model.fetchPosts(roomId: roomId) }
+            }
+            preheatAround(index: index, ahead: 12)
+        }
+        .onDisappear {
+            cancelPreheatAround(index: index, ahead: 20)
+        }
+        if index < model.filteredPosts.count - 1 {
+            Rectangle()
+                .frame(height: 1)
+                .foregroundStyle(TLColor.borderCard.opacity(0.15))
         }
     }
 

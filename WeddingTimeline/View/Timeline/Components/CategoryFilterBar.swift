@@ -8,15 +8,17 @@
 import SwiftUI
 
 struct CategoryFilterBar: View {
-    @Bindable var vm: TimelineViewModel
+    let filters: [TimelineFilter]
+    let selectedFilter: TimelineFilter
+    let onSelect: (TimelineFilter) -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                ForEach(vm.availableFilters) { f in
-                    let isSel = vm.selectedFilter == f
+                ForEach(filters) { f in
+                    let isSel = selectedFilter == f
                     Button {
-                        vm.selectedFilter = f
+                        onSelect(f)
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: f.icon)
