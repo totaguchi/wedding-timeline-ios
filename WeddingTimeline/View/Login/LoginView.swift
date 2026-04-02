@@ -193,10 +193,6 @@ struct LoginView: View {
         .sheet(isPresented: $showAvatarPicker) {
             IconPickerView(selectedIcon: $vm.selectedIcon, icons: vm.icons)
         }
-        .onAppear {
-            // 既に匿名ログイン済みでなければここで実行しておいてもOK
-            Task { _ = try? await RoomRepository().signInAnonymouslyIfNeeded() }
-        }
     }
 }
 

@@ -97,7 +97,7 @@ struct SettingView: View {
             .alert("ログアウトしますか？", isPresented: $showLogoutAlert) {
                 Button("キャンセル", role: .cancel) { }
                 Button("ログアウト", role: .destructive) {
-                    Task { await session.signOut() }
+                    Task { await SignOutUseCase(session: session).execute() }
                 }
             } message: {
                 Text("ルームからログアウトします。よろしいですか？")
@@ -416,8 +416,7 @@ private extension SettingView {
         isDeleting = true
         defer { isDeleting = false }
         do {
-            // 実運用では Session 側で Firestore/Storage のユーザーデータ削除を実装してください。
-            try await session.deleteAccount()
+            try await DeleteAccountUseCase(session: session).execute()
         } catch {
             deleteError = error.localizedDescription
         }

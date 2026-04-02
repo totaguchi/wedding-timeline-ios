@@ -7,8 +7,6 @@
 
 import SwiftUI
 import FirebaseCore
-import FirebaseFirestore
-import FirebaseAuth
 import Nuke
 
 class AppDelegate: NSObject, UIApplicationDelegate {
@@ -53,7 +51,7 @@ struct WeddingTimelineApp: App {
                 ContentView()          // ← TabView が入っている画面
                     .environment(session)
                 // 例：ContentView の .task で
-                    .task { await session.bootstrapOnLaunch() }
+                    .task { await BootstrapSessionUseCase(session: session).execute() }
             } else {
                 LoginView()
                     .environment(session)
