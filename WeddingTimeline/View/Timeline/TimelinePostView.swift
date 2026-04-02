@@ -24,7 +24,7 @@ struct TimelinePostView: View {
         "oomimigitsune", "lesser_panda", "bear",
         "todo", "musasabi", "rakko"
     ]
-    @Environment(Session.self) private var session
+    @Environment(SessionStore.self) private var session
     
     // 表示タグ設定（常時 username の後ろに @xxxx を付ける）
     var useRoomScopedTag: Bool = true   // true: roomId + uid のハッシュでルームごとに変化

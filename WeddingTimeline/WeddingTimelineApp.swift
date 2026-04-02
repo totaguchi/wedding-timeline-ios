@@ -19,7 +19,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 @main
 struct WeddingTimelineApp: App {
-    @State private var session = Session()
+    @State private var session = SessionStore()
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     
     init() {

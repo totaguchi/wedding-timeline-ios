@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @Environment(Session.self) private var session
+    @Environment(SessionStore.self) private var session
     
     var body: some View {
         if #available(iOS 18.0, *) {
@@ -67,7 +67,7 @@ struct ContentView: View {
 
 #Preview("iOS 17 互換") {
     ContentView()
-        .environment(Session())
+        .environment(SessionStore())
 }
 
 #Preview {

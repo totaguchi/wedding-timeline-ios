@@ -21,10 +21,8 @@ final class LoginViewModel {
         "todo", "musasabi", "rakko"
     ]
 
-    private let roomRepo = RoomRepository()
-
     @MainActor
-    func join(session: Session) async {
+    func join(session: SessionStore) async {
         errorMessage = nil
         isLogin = true; defer { isLogin = false }
 

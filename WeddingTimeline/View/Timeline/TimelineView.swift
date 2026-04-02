@@ -23,7 +23,7 @@ struct TimelineView: View {
         let startIndex: Int
     }
 
-    @Environment(Session.self) private var session
+    @Environment(SessionStore.self) private var session
     @State private var model = TimelineViewModel()
     @State private var isShowingCreateView = false
     @State private var prefetcher = ImagePrefetcher()

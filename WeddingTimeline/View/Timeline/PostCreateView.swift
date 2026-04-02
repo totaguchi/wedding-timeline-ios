@@ -13,7 +13,7 @@ struct PostCreateView: View {
     // MARK: - Properties
     
     @Environment(\.dismiss) private var dismiss
-    @Environment(Session.self) private var session
+    @Environment(SessionStore.self) private var session
     @State private var viewModel: PostCreateViewModel
     @FocusState var textEditorFocus: Bool
     
