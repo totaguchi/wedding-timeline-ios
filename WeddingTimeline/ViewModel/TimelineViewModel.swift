@@ -5,10 +5,8 @@
 //  Created by 田口友暉 on 2025/08/17.
 //
 
-import FirebaseFirestore
 import Foundation
 import SwiftUI
-import FirebaseAuth
 
 @Observable
 class TimelineViewModel {
@@ -19,17 +17,29 @@ class TimelineViewModel {
 
     var posts: [TimelinePost] = []
     private(set) var filteredPosts: [TimelinePost] = []
-    private let postRepo = PostRepository()
-    private let db = Firestore.firestore()
+    private let postRepo: PostRepository
     private var mutedUids = Set<String>()
-    private var muteListener: ListenerRegistration? = nil
-    private var lastSnapshot: DocumentSnapshot? = nil
+    /// Firestore リスナーを Task に置き換え（FirebaseFirestore 型を ViewModel から除去）
+    private var muteListenTask: Task<Void, Never>? = nil
     private var listenTask: Task<Void, Never>? = nil
     private var knownIds = Set<String>()
     private var isFetching = false
     private var isRefreshing = false
     private var likeInFlight: Set<String> = []
-    
+
+    // UseCases
+    private let fetchUseCase: FetchTimelineUseCase
+    private let toggleLikeUseCase: ToggleLikeUseCase
+    private let deletePostUseCase: DeletePostUseCase
+    private let muteUserUseCase: MuteUserUseCase
+    private let reportPostUseCase: ReportPostUseCase
+
+    /// Session は View の onAppear で configure(session:) を通じて注入する
+    private var session: SessionStore?
+
+    /// UID を SessionStore から取得（Auth.auth() を ViewModel から除去）
+    private var currentUID: String? { session?.cachedMember?.uid }
+
     // Phase 3-A: メモリ上限（300件）
     private let maxPostsInMemory = 300
 
@@ -43,6 +53,26 @@ class TimelineViewModel {
         didSet { rebuildFilteredPosts() }
     }
     let availableFilters: [TimelineFilter] = TimelineFilter.allCases
+
+    init() {
+        let repo = PostRepository()
+        postRepo = repo
+        fetchUseCase = FetchTimelineUseCase(postRepo: repo)
+        toggleLikeUseCase = ToggleLikeUseCase(postRepo: repo)
+        deletePostUseCase = DeletePostUseCase(postRepo: repo)
+        muteUserUseCase = MuteUserUseCase(postRepo: repo)
+        reportPostUseCase = ReportPostUseCase(postRepo: repo)
+    }
+
+    // MARK: - Session 注入
+
+    /// View の onAppear で必ず呼ぶ。UID の取得元として使用する。
+    @MainActor
+    func configure(session: SessionStore) {
+        self.session = session
+    }
+
+    // MARK: - Helpers
 
     /// `posts` と `pendingNew` を合わせた ID セットを再構築する
     private func rebuildKnownIds() {
@@ -63,7 +93,7 @@ class TimelineViewModel {
         rebuildKnownIds()
     }
 
-    /// `posts` と `pendingNew` の合計件数が上限を超えたら、まず表示中の投稿を間引き、必要なら新着バッファも削る
+    /// `posts` と `pendingNew` の合計件数が上限を超えたら間引く
     private func trimMemoryIfNeeded(preferredPostTrimSide: TrimSide) {
         let overflow = posts.count + pendingNew.count - maxPostsInMemory
         guard overflow > 0 else { return }
@@ -99,8 +129,8 @@ class TimelineViewModel {
         }
     }
 
-    init () {}
-    
+    // MARK: - Fetch
+
     @MainActor
     func fetchPosts(roomId: String, reset: Bool = false) async {
         if isFetching { return }
@@ -109,30 +139,24 @@ class TimelineViewModel {
 
         do {
             if reset {
-                lastSnapshot = nil
                 posts.removeAll()
                 pendingNew.removeAll()
                 newBadgeCount = 0
                 knownIds.removeAll()
-                rebuildFilteredPosts() // reset 直後に UI を空状態へ同期（fetch 失敗時も一致を保つ）
+                rebuildFilteredPosts()
             }
-            let (models, cursor) = try await postRepo.fetchPosts(
-                roomId: roomId,
-                limit: 50,
-                startAfter: lastSnapshot
-            )
-            // 重複ID・ミュート対象を除外して追加
-            let newOnes = models.filter { !knownIds.contains($0.id) && !mutedUids.contains($0.authorId) }
+            let newPosts = try await fetchUseCase.execute(roomId: roomId, reset: reset)
+            let newOnes = newPosts.filter { !knownIds.contains($0.id) && !mutedUids.contains($0.authorId) }
             posts.append(contentsOf: newOnes)
             knownIds.formUnion(newOnes.map { $0.id })
-            lastSnapshot = cursor
-
             trimPostsIfNeeded(removingFrom: .head)
             rebuildFilteredPosts()
         } catch {
             print("[TimelineViewModel] Error fetching posts: \(error)")
         }
     }
+
+    // MARK: - Refresh
 
     @MainActor
     func refreshHead(roomId: String) async {
@@ -141,17 +165,12 @@ class TimelineViewModel {
         defer { isRefreshing = false }
 
         do {
-            // 最新ページのみ再取得（サーバー優先）
             let (head, _) = try await postRepo.fetchPosts(
-                roomId: roomId,
-                limit: 20,
-                startAfter: nil
+                roomId: roomId, limit: 20, startAfter: nil
             )
 
-            // 既存は更新、未知は先頭に追加（重複防止）
             var toInsert: [TimelinePost] = []
             for item in head {
-                // ミュート対象はスキップ
                 if mutedUids.contains(item.authorId) { continue }
                 if let idx = posts.firstIndex(where: { $0.id == item.id }) {
                     posts[idx] = item
@@ -176,7 +195,9 @@ class TimelineViewModel {
             print("[TimelineViewModel] Error refreshing head: \(error)")
         }
     }
-    
+
+    // MARK: - Listen
+
     @MainActor
     func markAtTop(_ atTop: Bool) {
         if atTop != isAtTop {
@@ -197,16 +218,13 @@ class TimelineViewModel {
         trimPostsIfNeeded(removingFrom: .tail)
         rebuildFilteredPosts()
     }
-    
+
     @MainActor
     func startListening(roomId: String, limit: Int = 20) {
-        // 既存の購読があれば停止（posts/knownIds/lastSnapshot は維持）。isLiked も統合済みストリームを利用。
         listenTask?.cancel()
         listenTask = nil
-        // ミュート購読を開始（ルーム切替時に更新）
         startMuteListening(roomId: roomId)
 
-        // knownIds が空の場合は、既存 posts から初期化しておく（重複防止）
         if knownIds.isEmpty {
             knownIds.formUnion(posts.map { $0.id })
         }
@@ -220,9 +238,7 @@ class TimelineViewModel {
 
                         var toInsert: [TimelinePost] = []
 
-                        // 既存IDは更新・未知IDは先頭挿入 or バッファに収集
                         for item in items {
-                            // ミュート対象はスキップ
                             if self.mutedUids.contains(item.authorId) { continue }
                             if let idx = self.posts.firstIndex(where: { $0.id == item.id }) {
                                 self.posts[idx] = item
@@ -236,10 +252,8 @@ class TimelineViewModel {
                             let sorted = toInsert.sorted { $0.createdAt > $1.createdAt }
                             if self.isAtTop {
                                 self.posts.insert(contentsOf: sorted, at: 0)
-
                                 self.trimPostsIfNeeded(removingFrom: .tail)
                             } else {
-                                // 先頭にいない時はバッファに積んでバッジカウントを増やす
                                 self.pendingNew.append(contentsOf: sorted)
                                 self.newBadgeCount = min(99, self.newBadgeCount + sorted.count)
                                 self.trimMemoryIfNeeded(preferredPostTrimSide: .head)
@@ -258,8 +272,8 @@ class TimelineViewModel {
     func stopListening() {
         listenTask?.cancel()
         listenTask = nil
-        muteListener?.remove()
-        muteListener = nil
+        muteListenTask?.cancel()
+        muteListenTask = nil
     }
 
     @MainActor
@@ -277,53 +291,34 @@ class TimelineViewModel {
         mutedUids.contains(authorId)
     }
 
-    @MainActor
-    func setMute(roomId: String, targetUid: String, mute: Bool) async -> Bool {
-        guard let uid = Auth.auth().currentUser?.uid else { return false }
-        do {
-            try await postRepo.setMute(roomId: roomId, targetUid: targetUid, by: uid, mute: mute)
-            applyMuteChange(targetUid: targetUid, isMuted: mute)
-            return true
-        } catch {
-            print("[Mute] set failed:", error)
-            return false
-        }
-    }
-    
+    // MARK: - Like
+
     @MainActor
     func toggleLike(model: TimelinePost, roomId: String, isLiked: Bool) async {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
+        guard let uid = currentUID else { return }
         let postId = model.id
 
-        // 連打抑止（同一 postId の like/unlike を同時に走らせない）
         if likeInFlight.contains(postId) { return }
         likeInFlight.insert(postId)
         defer { likeInFlight.remove(postId) }
 
-        // 対象ポストのインデックスを取得
         guard let idx = posts.firstIndex(where: { $0.id == postId }) else { return }
 
-        // 楽観更新：UI は常にモデルの値を表示
         let old = posts[idx]
         posts[idx].isLiked = isLiked
         posts[idx].likeCount = max(0, posts[idx].likeCount + (isLiked ? 1 : -1))
         rebuildFilteredPosts()
 
         do {
-            let newCount = try await postRepo.toggleLike(
-                roomId: roomId,
-                postId: postId,
-                uid: uid,
-                like: isLiked
+            let newCount = try await toggleLikeUseCase.execute(
+                roomId: roomId, postId: postId, uid: uid, isLiked: isLiked
             )
-            // サーバーが返した確定値で補正
             if let j = posts.firstIndex(where: { $0.id == postId }) {
                 posts[j].likeCount = newCount
                 posts[j].isLiked = isLiked
                 rebuildFilteredPosts()
             }
         } catch {
-            // 失敗時はロールバック
             if let j = posts.firstIndex(where: { $0.id == postId }) {
                 posts[j] = old
                 rebuildFilteredPosts()
@@ -331,16 +326,17 @@ class TimelineViewModel {
             print("[Like] toggle failed:", error)
         }
     }
-    
-    
+
+    // MARK: - Delete
+
     @MainActor
     func deletePost(roomId: String, postId: String) async -> Bool {
-        guard let uid = Auth.auth().currentUser?.uid else {
+        guard let uid = currentUID else {
             print("[Delete] not signed in")
             return false
         }
         do {
-            try await postRepo.deletePost(roomId: roomId, postId: postId, authorUid: uid)
+            try await deletePostUseCase.execute(roomId: roomId, postId: postId, uid: uid)
             if let idx = posts.firstIndex(where: { $0.id == postId }) {
                 posts.remove(at: idx)
             }
@@ -354,8 +350,30 @@ class TimelineViewModel {
             return false
         }
     }
-    
+
+    // MARK: - Report
+
+    @MainActor
+    func reportPost(postId: String, reason: String) async {
+        guard let uid = currentUID else {
+            print("[Report] not signed in")
+            return
+        }
+        guard let roomId = session?.currentRoomId, !roomId.isEmpty else {
+            print("[Report] roomId not found in session")
+            return
+        }
+        do {
+            try await reportPostUseCase.execute(
+                roomId: roomId, postId: postId, reason: reason, reporterUid: uid
+            )
+        } catch {
+            print("[Report] failed:", error)
+        }
+    }
+
     // MARK: - Mute
+
     @MainActor
     func applyMuteChange(targetUid: String, isMuted: Bool) {
         if isMuted {
@@ -371,44 +389,51 @@ class TimelineViewModel {
         rebuildFilteredPosts()
     }
 
-    // MARK: - Mute Listening
     @MainActor
-    func startMuteListening(roomId: String) {
-        // 既存リスナー解除
-        muteListener?.remove()
-        muteListener = nil
-        
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ref = db.collection("rooms").document(roomIdSan)
-            .collection("mutes").document(uid)
-            .collection("users")
-        
-        muteListener = ref.addSnapshotListener { [weak self] snap, err in
-            guard let self else { return }
-            if let err {
-                print("[Mute] listen error:", err)
-                return
-            }
-            // 現在のミュート対象をセットで再構築
-            var next = Set<String>()
-            snap?.documents.forEach { next.insert($0.documentID) }
-            // 反映（除外する）
-            self.mutedUids = next
-            // すでに保持している投稿からも除外・整合
-            self.posts.removeAll(where: { self.mutedUids.contains($0.authorId) })
-            // ペンディングも掃除してバッジ更新
-            self.pendingNew.removeAll(where: { self.mutedUids.contains($0.authorId) })
-            self.newBadgeCount = min(99, self.pendingNew.count)
-            self.rebuildKnownIds()
-            self.rebuildFilteredPosts()
+    func setMute(roomId: String, targetUid: String, mute: Bool) async -> Bool {
+        guard let uid = currentUID else { return false }
+        do {
+            try await muteUserUseCase.execute(
+                roomId: roomId, targetUid: targetUid, ownerUid: uid, mute: mute
+            )
+            applyMuteChange(targetUid: targetUid, isMuted: mute)
+            return true
+        } catch {
+            print("[Mute] set failed:", error)
+            return false
         }
     }
-    
+
+    // MARK: - Mute Listening
+
+    @MainActor
+    func startMuteListening(roomId: String) {
+        muteListenTask?.cancel()
+        muteListenTask = nil
+
+        guard let uid = currentUID else { return }
+        let stream = postRepo.listenMutedUserIds(roomId: roomId, ownerUid: uid)
+
+        muteListenTask = Task {
+            do {
+                for try await mutedSet in stream {
+                    self.mutedUids = mutedSet
+                    self.posts.removeAll(where: { mutedSet.contains($0.authorId) })
+                    self.pendingNew.removeAll(where: { mutedSet.contains($0.authorId) })
+                    self.newBadgeCount = min(99, self.pendingNew.count)
+                    self.rebuildKnownIds()
+                    self.rebuildFilteredPosts()
+                }
+            } catch {
+                print("[Mute] listen error:", error)
+            }
+        }
+    }
+
     @MainActor
     func stopMuteListening() {
-        muteListener?.remove()
-        muteListener = nil
+        muteListenTask?.cancel()
+        muteListenTask = nil
     }
 
     private func matchesFilter(_ post: TimelinePost, _ filter: TimelineFilter) -> Bool {

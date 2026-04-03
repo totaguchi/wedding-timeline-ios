@@ -20,6 +20,8 @@ struct TimelinePostView: View {
     let onSetMute: (@Sendable (String, Bool) async -> Bool)?
     // Phase 3-B: 画像タップ時のコールバック（fullScreenCover 一本化）
     let onImageTap: (([URL], Int) -> Void)?
+    /// 通報処理コールバック（postId, reason）
+    let onReport: (@Sendable (String, String) async -> Void)?
     let icons = [
         "oomimigitsune", "lesser_panda", "bear",
         "todo", "musasabi", "rakko"
@@ -39,7 +41,8 @@ struct TimelinePostView: View {
         onPostDelete: @escaping (@Sendable (String) async -> Bool),
         onMuteChanged: ((String, Bool) -> Void)? = nil,
         onSetMute: (@Sendable (String, Bool) async -> Bool)? = nil,
-        onImageTap: (([URL], Int) -> Void)? = nil
+        onImageTap: (([URL], Int) -> Void)? = nil,
+        onReport: (@Sendable (String, String) async -> Void)? = nil
     ) {
         self.model = model
         self.activeVideoPostId = activeVideoPostId
@@ -50,6 +53,7 @@ struct TimelinePostView: View {
         self.onMuteChanged = onMuteChanged
         self.onSetMute = onSetMute
         self.onImageTap = onImageTap
+        self.onReport = onReport
     }
     
     var body: some View {
@@ -75,7 +79,8 @@ struct TimelinePostView: View {
                             onToggleLike: onToggleLike,
                             onPostDelete: onPostDelete,
                             onMuteChanged: onMuteChanged,
-                            onSetMute: onSetMute
+                            onSetMute: onSetMute,
+                            onReport: onReport
                         )
                     } label: {
                         headerAndContent
