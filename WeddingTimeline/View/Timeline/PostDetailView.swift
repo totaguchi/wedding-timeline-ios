@@ -30,6 +30,7 @@ struct PostDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showReportDone = false
+    @State private var showReportFailed = false
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var deleteError: String?
@@ -62,8 +63,9 @@ struct PostDetailView: View {
         guard let onReport else { return }
         Task {
             let ok = await onReport(model.id, reason)
-            // 通報成功時のみ完了ダイアログを表示する
-            if ok { await MainActor.run { showReportDone = true } }
+            await MainActor.run {
+                if ok { showReportDone = true } else { showReportFailed = true }
+            }
         }
     }
 
@@ -161,6 +163,11 @@ struct PostDetailView: View {
         }
         .alert("報告を送信しました", isPresented: $showReportDone) {
             Button("OK", role: .cancel) { }
+        }
+        .alert("報告の送信に失敗しました", isPresented: $showReportFailed) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("時間をおいて再度お試しください。")
         }
         .alert("このポストを削除しますか？", isPresented: $showDeleteConfirm) {
             Button("キャンセル", role: .cancel) { }
