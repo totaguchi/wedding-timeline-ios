@@ -20,8 +20,8 @@ struct TimelinePostView: View {
     let onSetMute: (@Sendable (String, Bool) async -> Bool)?
     // Phase 3-B: 画像タップ時のコールバック（fullScreenCover 一本化）
     let onImageTap: (([URL], Int) -> Void)?
-    /// 通報処理コールバック（postId, reason）
-    let onReport: (@Sendable (String, String) async -> Void)?
+    /// 通報処理コールバック（postId, reason） - 成功時 true を返す
+    let onReport: (@Sendable (String, String) async -> Bool)?
     let icons = [
         "oomimigitsune", "lesser_panda", "bear",
         "todo", "musasabi", "rakko"
@@ -42,7 +42,7 @@ struct TimelinePostView: View {
         onMuteChanged: ((String, Bool) -> Void)? = nil,
         onSetMute: (@Sendable (String, Bool) async -> Bool)? = nil,
         onImageTap: (([URL], Int) -> Void)? = nil,
-        onReport: (@Sendable (String, String) async -> Void)? = nil
+        onReport: (@Sendable (String, String) async -> Bool)? = nil
     ) {
         self.model = model
         self.activeVideoPostId = activeVideoPostId

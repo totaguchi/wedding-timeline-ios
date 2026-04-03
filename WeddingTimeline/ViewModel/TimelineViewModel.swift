@@ -354,21 +354,23 @@ class TimelineViewModel {
     // MARK: - Report
 
     @MainActor
-    func reportPost(postId: String, reason: String) async {
+    func reportPost(postId: String, reason: String) async -> Bool {
         guard let uid = currentUID else {
             print("[Report] not signed in")
-            return
+            return false
         }
         guard let roomId = session?.currentRoomId, !roomId.isEmpty else {
             print("[Report] roomId not found in session")
-            return
+            return false
         }
         do {
             try await reportPostUseCase.execute(
                 roomId: roomId, postId: postId, reason: reason, reporterUid: uid
             )
+            return true
         } catch {
             print("[Report] failed:", error)
+            return false
         }
     }
 

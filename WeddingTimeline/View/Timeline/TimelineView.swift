@@ -210,7 +210,7 @@ struct TimelineView: View {
                 startIndex: startIndex
             )
         } onReport: { postId, reason in
-            await model.reportPost(postId: postId, reason: reason)
+            return await model.reportPost(postId: postId, reason: reason)
         }
         .padding(.horizontal, 10)
         .onAppear {

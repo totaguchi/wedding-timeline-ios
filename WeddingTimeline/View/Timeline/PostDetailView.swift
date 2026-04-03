@@ -23,8 +23,8 @@ struct PostDetailView: View {
     let onMuteChanged: ((String, Bool) -> Void)?
     /// ミュート変更処理を親に委譲
     let onSetMute: (@Sendable (String, Bool) async -> Bool)?
-    /// 通報処理を親（ViewModel）に委譲（postId, reason）
-    let onReport: (@Sendable (String, String) async -> Void)?
+    /// 通報処理を親（ViewModel）に委譲（postId, reason） - 成功時 true を返す
+    let onReport: (@Sendable (String, String) async -> Bool)?
 
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -46,7 +46,7 @@ struct PostDetailView: View {
         onPostDelete: @escaping (@Sendable (String) async -> Bool),
         onMuteChanged: ((String, Bool) -> Void)? = nil,
         onSetMute: (@Sendable (String, Bool) async -> Bool)? = nil,
-        onReport: (@Sendable (String, String) async -> Void)? = nil
+        onReport: (@Sendable (String, String) async -> Bool)? = nil
     ) {
         self.model = model
         self.isMutedByViewer = isMutedByViewer
@@ -61,8 +61,9 @@ struct PostDetailView: View {
     private func reportPost(reason: String) {
         guard let onReport else { return }
         Task {
-            await onReport(model.id, reason)
-            await MainActor.run { showReportDone = true }
+            let ok = await onReport(model.id, reason)
+            // 通報成功時のみ完了ダイアログを表示する
+            if ok { await MainActor.run { showReportDone = true } }
         }
     }
 
