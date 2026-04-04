@@ -54,14 +54,16 @@ final class PostCreateViewModel {
     // MARK: - Dependencies
 
     private let createPostUseCase: CreatePostUseCase
-    
+    /// SessionStore への参照（configure(session:) で遅延注入）
+    private var session: SessionStore?
+
     // MARK: - Private State
-    
+
     /// プレースホルダー用の一時 ID
     private var placeholders: [SelectedAttachment] = []
-    
+
     // MARK: - Initialization
-    
+
     /// - Parameters:
     ///   - roomId: 投稿先の Room ID
     ///   - createPostUseCase: 投稿作成ユースケース（テスト時に Mock 注入可能）
@@ -72,7 +74,12 @@ final class PostCreateViewModel {
         self.roomId = roomId
         self.createPostUseCase = createPostUseCase
     }
-    
+
+    /// SessionStore を注入する（View の onAppear / task から呼ぶ）
+    func configure(session: SessionStore) {
+        self.session = session
+    }
+
     /// 初期化処理（必要に応じて Room 情報の検証など）
     func initialize() async {
         // 将来的に Room の権限チェックなどを実装
@@ -198,16 +205,18 @@ final class PostCreateViewModel {
     
     /// 投稿を送信
     ///
-    /// - Parameters:
-    ///   - authorId: 投稿者の UID（SessionStore.cachedMember.uid）
-    ///   - authorName: 投稿者名
-    ///   - userIcon: アイコン識別子
+    /// 投稿者 UID は configure(session:) で注入された SessionStore から取得する。
+    /// View から authorId を受け取らないことで、UI 経由の値と認証状態のズレを防ぐ。
+    ///
     /// - Throws: アップロードまたは Firestore 書き込みのエラー
     /// - Returns: 成功時は `true`（View で `dismiss()` を呼ぶため）
     @discardableResult
-    func submit(authorId: String, authorName: String, userIcon: String) async throws -> Bool {
+    func submit() async throws -> Bool {
         guard canSubmit else { return false }
-        guard !authorId.isEmpty else { throw AppError.unauthenticated }
+
+        guard let member = session?.cachedMember, !member.uid.isEmpty else {
+            throw AppError.unauthenticated
+        }
 
         isSubmitting = true
         defer { isSubmitting = false }
@@ -218,9 +227,9 @@ final class PostCreateViewModel {
                 content: text,
                 tag: selectedTag,
                 attachments: attachments.compactMap { $0.kind },
-                authorId: authorId,
-                authorName: authorName,
-                userIcon: userIcon
+                authorId: member.uid,
+                authorName: member.username,
+                userIcon: member.userIcon ?? ""
             )
             try await createPostUseCase.execute(input: input)
             return true
