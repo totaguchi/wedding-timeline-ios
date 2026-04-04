@@ -227,8 +227,11 @@ struct PostCreateView: View {
     
     private func submitAction() {
         Task {
-            if try await viewModel.submit(authorName: session.cachedMember?.username ?? "",
-                                          userIcon: session.cachedMember?.userIcon ?? "") {
+            if try await viewModel.submit(
+                authorId: session.cachedMember?.uid ?? "",
+                authorName: session.cachedMember?.username ?? "",
+                userIcon: session.cachedMember?.userIcon ?? ""
+            ) {
                 dismiss()
             }
         }

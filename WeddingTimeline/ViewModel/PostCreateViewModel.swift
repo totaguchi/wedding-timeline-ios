@@ -8,7 +8,6 @@
 import Foundation
 import SwiftUI
 import PhotosUI
-import FirebaseAuth
 import AVFoundation
 import UniformTypeIdentifiers
 
@@ -53,9 +52,8 @@ final class PostCreateViewModel {
     }
     
     // MARK: - Dependencies
-    
-    private let mediaService: MediaService
-    private let postRepo: PostRepository
+
+    private let createPostUseCase: CreatePostUseCase
     
     // MARK: - Private State
     
@@ -66,16 +64,13 @@ final class PostCreateViewModel {
     
     /// - Parameters:
     ///   - roomId: 投稿先の Room ID
-    ///   - mediaService: メディアサービス（テスト時に Mock 注入可能）
-    ///   - postRepo: 投稿リポジトリ（テスト時に Mock 注入可能）
+    ///   - createPostUseCase: 投稿作成ユースケース（テスト時に Mock 注入可能）
     init(
         roomId: String,
-        mediaService: MediaService = MediaService(),
-        postRepo: PostRepository = PostRepository()
+        createPostUseCase: CreatePostUseCase = CreatePostUseCase()
     ) {
         self.roomId = roomId
-        self.mediaService = mediaService
-        self.postRepo = postRepo
+        self.createPostUseCase = createPostUseCase
     }
     
     /// 初期化処理（必要に応じて Room 情報の検証など）
@@ -203,40 +198,31 @@ final class PostCreateViewModel {
     
     /// 投稿を送信
     ///
-    /// - Throws: Storage/Firestore のエラー
+    /// - Parameters:
+    ///   - authorId: 投稿者の UID（SessionStore.cachedMember.uid）
+    ///   - authorName: 投稿者名
+    ///   - userIcon: アイコン識別子
+    /// - Throws: アップロードまたは Firestore 書き込みのエラー
     /// - Returns: 成功時は `true`（View で `dismiss()` を呼ぶため）
     @discardableResult
-    func submit(authorName: String, userIcon: String) async throws -> Bool {
+    func submit(authorId: String, authorName: String, userIcon: String) async throws -> Bool {
         guard canSubmit else { return false }
-        
-        guard let uid = Auth.auth().currentUser?.uid else {
-            throw AppError.unauthenticated
-        }
-        
+        guard !authorId.isEmpty else { throw AppError.unauthenticated }
+
         isSubmitting = true
         defer { isSubmitting = false }
-        
+
         do {
-            // 1) Storage にメディアをアップロード（kind を compactMap で抽出）
-            let kinds = attachments.compactMap { $0.kind }
-            let mediaDTO = try await mediaService.uploadMedia(
-                attachments: kinds,
-                roomId: roomId
-            )
-            
-            // 2) Firestore に投稿を作成
-            let postId = postRepo.generatePostId(roomId: roomId)
-            try await postRepo.createPost(
+            let input = CreatePostUseCase.Input(
                 roomId: roomId,
-                postId: postId,
                 content: text,
-                authorId: uid,
+                tag: selectedTag,
+                attachments: attachments.compactMap { $0.kind },
+                authorId: authorId,
                 authorName: authorName,
-                userIcon: userIcon,
-                tag: selectedTag.firestoreValue,
-                media: mediaDTO
+                userIcon: userIcon
             )
-            
+            try await createPostUseCase.execute(input: input)
             return true
         } catch {
             // エラーを ViewModel で保持（View で Alert 表示）
