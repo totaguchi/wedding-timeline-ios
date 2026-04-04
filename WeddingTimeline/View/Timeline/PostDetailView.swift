@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import FirebaseAuth
 
 struct PostDetailView: View {
     private struct GalleryPayload: Identifiable {
@@ -18,28 +17,28 @@ struct PostDetailView: View {
     let model: TimelinePost
     let isMutedByViewer: Bool
     let onToggleLike: (Bool) -> Void
-    /// 親（TimelineView / ViewModel）に削除処理を委譲するためのコールバック（省略可）
-    /// - Returns: 成功したら true
+    /// 親（TimelineView / ViewModel）に削除処理を委譲するためのコールバック
     let onPostDelete: (@Sendable (String) async -> Bool)
-    /// ミュート状態が変わったら親に通知（省略可）
+    /// ミュート状態が変わったら親に通知
     let onMuteChanged: ((String, Bool) -> Void)?
-    /// ミュート変更処理（ViewModel 側の真実源）を親に委譲
+    /// ミュート変更処理を親に委譲
     let onSetMute: (@Sendable (String, Bool) async -> Bool)?
+    /// 通報処理を親（ViewModel）に委譲（postId, reason） - 成功時 true を返す
+    let onReport: (@Sendable (String, String) async -> Bool)?
 
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
 
     @State private var showReportDone = false
+    @State private var showReportFailed = false
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var deleteError: String?
     @State private var isMuted = false
-    
-    // ギャラリー表示トリガーとデータを一体化してレースを回避
+
     @State private var galleryPayload: GalleryPayload?
 
     private let reportReasons: [String] = ["スパム/宣伝", "不適切な表現", "プライバシーの侵害", "その他"]
-    private let postRepo = PostRepository()
 
     init(
         model: TimelinePost,
@@ -47,7 +46,8 @@ struct PostDetailView: View {
         onToggleLike: @escaping (Bool) -> Void,
         onPostDelete: @escaping (@Sendable (String) async -> Bool),
         onMuteChanged: ((String, Bool) -> Void)? = nil,
-        onSetMute: (@Sendable (String, Bool) async -> Bool)? = nil
+        onSetMute: (@Sendable (String, Bool) async -> Bool)? = nil,
+        onReport: (@Sendable (String, String) async -> Bool)? = nil
     ) {
         self.model = model
         self.isMutedByViewer = isMutedByViewer
@@ -55,28 +55,20 @@ struct PostDetailView: View {
         self.onPostDelete = onPostDelete
         self.onMuteChanged = onMuteChanged
         self.onSetMute = onSetMute
+        self.onReport = onReport
         _isMuted = State(initialValue: isMutedByViewer)
     }
 
-    private func reportToFirestore(reason: String) {
-        guard let uid = Auth.auth().currentUser?.uid else {
-            print("[Report] not signed in")
-            return
-        }
-        guard !session.currentRoomId.isEmpty else {
-            print("[Report] roomId not found in session")
-            return
-        }
+    private func reportPost(reason: String) {
+        guard let onReport else { return }
         Task {
-            do {
-                try await postRepo.reportPost(roomId: session.currentRoomId, postId: model.id, reason: reason, reporterUid: uid)
-                await MainActor.run { showReportDone = true }
-            } catch {
-                print("[Report] failed:", error)
+            let ok = await onReport(model.id, reason)
+            await MainActor.run {
+                if ok { showReportDone = true } else { showReportFailed = true }
             }
         }
     }
-    
+
     @MainActor
     private func toggleMuteUser() {
         guard let onSetMute else { return }
@@ -92,7 +84,6 @@ struct PostDetailView: View {
     }
 
     private func deletePost() {
-        // 1) コールバックが提供されていれば、まずはそれを使う（UI層は依頼だけに徹する）
         isDeleting = true
         Task {
             let result = await onPostDelete(model.id)
@@ -108,14 +99,15 @@ struct PostDetailView: View {
     }
 
     var body: some View {
-        let isMine = (Auth.auth().currentUser?.uid == model.authorId)
+        // UID を SessionStore から取得（FirebaseAuth 非依存）
+        let isMine = (session.cachedMember?.uid == model.authorId)
 
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 TimelinePostView(
-                    model: model, 
-                    enableNavigation: false, 
-                    onToggleLike: onToggleLike, 
+                    model: model,
+                    enableNavigation: false,
+                    onToggleLike: onToggleLike,
                     onPostDelete: onPostDelete,
                     onImageTap: { urls, startIndex in
                         guard !urls.isEmpty else { return }
@@ -142,7 +134,7 @@ struct PostDetailView: View {
                     Menu("報告する", systemImage: "flag") {
                         ForEach(reportReasons, id: \.self) { reason in
                             Button(reason, role: .destructive) {
-                                reportToFirestore(reason: reason)
+                                reportPost(reason: reason)
                             }
                         }
                     }
@@ -171,6 +163,11 @@ struct PostDetailView: View {
         }
         .alert("報告を送信しました", isPresented: $showReportDone) {
             Button("OK", role: .cancel) { }
+        }
+        .alert("報告の送信に失敗しました", isPresented: $showReportFailed) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("時間をおいて再度お試しください。")
         }
         .alert("このポストを削除しますか？", isPresented: $showDeleteConfirm) {
             Button("キャンセル", role: .cancel) { }

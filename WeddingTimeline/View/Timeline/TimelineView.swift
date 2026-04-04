@@ -115,6 +115,7 @@ struct TimelineView: View {
         }
         // 画面表示で購読開始
         .onAppear {
+            model.configure(session: session)
             guard let roomId = activeRoomId else { return }
             Task {
                 await model.fetchPosts(roomId: roomId, reset: true)
@@ -208,6 +209,8 @@ struct TimelineView: View {
                 urls: urls,
                 startIndex: startIndex
             )
+        } onReport: { postId, reason in
+            return await model.reportPost(postId: postId, reason: reason)
         }
         .padding(.horizontal, 10)
         .onAppear {
