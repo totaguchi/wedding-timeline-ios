@@ -8,7 +8,6 @@
 import Foundation
 import SwiftUI
 import PhotosUI
-import FirebaseAuth
 import AVFoundation
 import UniformTypeIdentifiers
 
@@ -53,31 +52,34 @@ final class PostCreateViewModel {
     }
     
     // MARK: - Dependencies
-    
-    private let mediaService: MediaService
-    private let postRepo: PostRepository
-    
+
+    private let createPostUseCase: CreatePostUseCase
+    /// SessionStore への参照（configure(session:) で遅延注入）
+    private var session: SessionStore?
+
     // MARK: - Private State
-    
+
     /// プレースホルダー用の一時 ID
     private var placeholders: [SelectedAttachment] = []
-    
+
     // MARK: - Initialization
-    
+
     /// - Parameters:
     ///   - roomId: 投稿先の Room ID
-    ///   - mediaService: メディアサービス（テスト時に Mock 注入可能）
-    ///   - postRepo: 投稿リポジトリ（テスト時に Mock 注入可能）
+    ///   - createPostUseCase: 投稿作成ユースケース（テスト時に Mock 注入可能）
     init(
         roomId: String,
-        mediaService: MediaService = MediaService(),
-        postRepo: PostRepository = PostRepository()
+        createPostUseCase: CreatePostUseCase = CreatePostUseCase()
     ) {
         self.roomId = roomId
-        self.mediaService = mediaService
-        self.postRepo = postRepo
+        self.createPostUseCase = createPostUseCase
     }
-    
+
+    /// SessionStore を注入する（View の onAppear / task から呼ぶ）
+    func configure(session: SessionStore) {
+        self.session = session
+    }
+
     /// 初期化処理（必要に応じて Room 情報の検証など）
     func initialize() async {
         // 将来的に Room の権限チェックなどを実装
@@ -203,40 +205,33 @@ final class PostCreateViewModel {
     
     /// 投稿を送信
     ///
-    /// - Throws: Storage/Firestore のエラー
+    /// 投稿者 UID は configure(session:) で注入された SessionStore から取得する。
+    /// View から authorId を受け取らないことで、UI 経由の値と認証状態のズレを防ぐ。
+    ///
+    /// - Throws: アップロードまたは Firestore 書き込みのエラー
     /// - Returns: 成功時は `true`（View で `dismiss()` を呼ぶため）
     @discardableResult
-    func submit(authorName: String, userIcon: String) async throws -> Bool {
+    func submit() async throws -> Bool {
         guard canSubmit else { return false }
-        
-        guard let uid = Auth.auth().currentUser?.uid else {
+
+        guard let member = session?.cachedMember, !member.uid.isEmpty else {
             throw AppError.unauthenticated
         }
-        
+
         isSubmitting = true
         defer { isSubmitting = false }
-        
+
         do {
-            // 1) Storage にメディアをアップロード（kind を compactMap で抽出）
-            let kinds = attachments.compactMap { $0.kind }
-            let mediaDTO = try await mediaService.uploadMedia(
-                attachments: kinds,
-                roomId: roomId
-            )
-            
-            // 2) Firestore に投稿を作成
-            let postId = postRepo.generatePostId(roomId: roomId)
-            try await postRepo.createPost(
+            let input = CreatePostUseCase.Input(
                 roomId: roomId,
-                postId: postId,
                 content: text,
-                authorId: uid,
-                authorName: authorName,
-                userIcon: userIcon,
-                tag: selectedTag.firestoreValue,
-                media: mediaDTO
+                tag: selectedTag,
+                attachments: attachments.compactMap { $0.kind },
+                authorId: member.uid,
+                authorName: member.username,
+                userIcon: member.userIcon ?? ""
             )
-            
+            try await createPostUseCase.execute(input: input)
             return true
         } catch {
             // エラーを ViewModel で保持（View で Alert 表示）

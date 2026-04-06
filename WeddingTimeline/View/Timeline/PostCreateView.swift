@@ -71,7 +71,10 @@ struct PostCreateView: View {
                 if let message = viewModel.errorMessage { Text(message) }
             }
         }
-        .task { await viewModel.initialize() }
+        .task {
+            viewModel.configure(session: session)
+            await viewModel.initialize()
+        }
     }
     
     // MARK: - Sections
@@ -227,8 +230,7 @@ struct PostCreateView: View {
     
     private func submitAction() {
         Task {
-            if try await viewModel.submit(authorName: session.cachedMember?.username ?? "",
-                                          userIcon: session.cachedMember?.userIcon ?? "") {
+            if try await viewModel.submit() {
                 dismiss()
             }
         }
