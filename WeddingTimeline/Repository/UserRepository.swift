@@ -71,7 +71,9 @@ final class UserRepository {
     }
 
     // 4) ルーム用アイコンを更新（Storageアップ→URL保存）
-    func changeAvatar(roomId: String, uid: String, imageData: Data, contentType: String = "image/jpeg") async throws {
+    /// - Returns: Storage にアップロードした画像のダウンロード URL
+    @discardableResult
+    func changeAvatar(roomId: String, uid: String, imageData: Data, contentType: String = "image/jpeg") async throws -> URL {
         // 推奨パス: avatars/{roomId}/{uid}.jpg
         let path = "avatars/\(roomId)/\(uid).jpg"
         let ref = storage.reference(withPath: path)
@@ -104,6 +106,7 @@ final class UserRepository {
         try await db.collection("rooms").document(roomId)
             .collection("members").document(uid)
             .updateData(["avatarURL": url.absoluteString])
+        return url
     }
 
     private func runTransactionAsync(_ body: @escaping (Transaction) throws -> Void) async throws {

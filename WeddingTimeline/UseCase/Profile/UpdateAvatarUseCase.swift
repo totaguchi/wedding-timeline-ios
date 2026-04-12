@@ -44,18 +44,19 @@ final class UpdateAvatarUseCase {
     ///
     /// - Parameter input: 更新パラメータ
     /// - Throws: Storage アップロードまたは Firestore 書き込みエラー
-    @MainActor
+    ///
+    /// - Note: Firestore の保存キーは `avatarURL` だが RoomMemberDTO は `usericon` を読むため、
+    ///         再フェッチでは更新後の URL が取得できない。
+    ///         `changeAvatar` が返す URL を直接キャッシュに反映する。
     func execute(input: Input) async throws {
-        try await userRepo.changeAvatar(
+        // ネットワーク処理は MainActor に縛らない
+        let downloadURL = try await userRepo.changeAvatar(
             roomId: input.roomId,
             uid: input.uid,
             imageData: input.imageData,
             contentType: input.contentType
         )
-
-        // 更新後の最新データを取得してキャッシュに反映
-        if let updated = try await userRepo.fetchRoomUser(roomId: input.roomId, uid: input.uid) {
-            session.updateCachedMember(updated)
-        }
+        // SessionStore は @MainActor のため更新だけ MainActor で実行
+        await MainActor.run { session.updateCachedUserIcon(downloadURL.absoluteString) }
     }
 }

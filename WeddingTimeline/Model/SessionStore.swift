@@ -69,7 +69,21 @@ extension SessionStore {
         )
     }
 
-    /// RoomMember からキャッシュ全体を更新する（UpdateAvatarUseCase から呼ぶ）
+    /// アイコン URL だけを更新してキャッシュに反映する（UpdateAvatarUseCase から呼ぶ）
+    ///
+    /// - Note: Firestore の保存キーは `avatarURL` だが RoomMemberDTO は `usericon` を読むため
+    ///         再フェッチでは URL が取得できない。このヘルパーで直接 URL を反映する。
+    func updateCachedUserIcon(_ urlString: String) {
+        guard let current = cachedMember else { return }
+        cachedMember = CachedMember(
+            uid: current.uid,
+            roomId: current.roomId,
+            username: current.username,
+            userIcon: urlString
+        )
+    }
+
+    /// RoomMember からキャッシュ全体を更新する
     func updateCachedMember(_ member: RoomMember) {
         cachedMember = CachedMember(
             uid: member.id,

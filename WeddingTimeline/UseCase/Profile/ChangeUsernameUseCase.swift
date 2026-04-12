@@ -41,20 +41,20 @@ final class ChangeUsernameUseCase {
     ///
     /// - Parameter input: 変更パラメータ
     /// - Throws: 重複エラーまたは Firestore 書き込みエラー
-    @MainActor
     func execute(input: Input) async throws {
         let trimmed = input.newUsername.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             throw AppError.invalidInput("ユーザー名を入力してください")
         }
 
+        // ネットワーク処理は MainActor に縛らない
         try await userRepo.changeUsername(
             roomId: input.roomId,
             newUsername: trimmed,
             uid: input.uid
         )
 
-        // SessionStore のキャッシュを更新してUIに即反映
-        session.updateCachedUsername(trimmed)
+        // SessionStore は @MainActor のため更新だけ MainActor で実行
+        await MainActor.run { session.updateCachedUsername(trimmed) }
     }
 }

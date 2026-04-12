@@ -40,17 +40,28 @@ final class SettingViewModel {
 
     /// ログアウトを実行する
     func signOut() async {
-        await signOutUseCase?.execute()
+        guard let useCase = signOutUseCase else {
+            // configure(session:) が呼ばれる前に操作された場合（通常は発生しない）
+            assertionFailure("SettingViewModel.configure(session:) が未実行です")
+            return
+        }
+        await useCase.execute()
     }
 
     /// アカウント削除を実行する
     ///
     /// 削除完了後は SessionStore の状態がリセットされ、ログイン画面に遷移する。
     func deleteAccount() async {
+        guard let useCase = deleteAccountUseCase else {
+            // configure(session:) が呼ばれる前に操作された場合（通常は発生しない）
+            assertionFailure("SettingViewModel.configure(session:) が未実行です")
+            deleteError = "セッション情報が取得できませんでした。画面を閉じて再度お試しください。"
+            return
+        }
         isDeleting = true
         defer { isDeleting = false }
         do {
-            try await deleteAccountUseCase?.execute()
+            try await useCase.execute()
         } catch {
             deleteError = error.localizedDescription
         }
