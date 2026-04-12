@@ -55,6 +55,31 @@ final class SessionStore {
     }
 }
 
+// MARK: - Cache Update Helpers
+
+extension SessionStore {
+    /// ユーザー名だけを更新してキャッシュに反映する（ChangeUsernameUseCase から呼ぶ）
+    func updateCachedUsername(_ newUsername: String) {
+        guard let current = cachedMember else { return }
+        cachedMember = CachedMember(
+            uid: current.uid,
+            roomId: current.roomId,
+            username: newUsername,
+            userIcon: current.userIcon
+        )
+    }
+
+    /// RoomMember からキャッシュ全体を更新する（UpdateAvatarUseCase から呼ぶ）
+    func updateCachedMember(_ member: RoomMember) {
+        cachedMember = CachedMember(
+            uid: member.id,
+            roomId: member.roomId,
+            username: member.username,
+            userIcon: member.usericon
+        )
+    }
+}
+
 // MARK: - CachedMemberDTO 変換
 
 private extension CachedMemberDTO {

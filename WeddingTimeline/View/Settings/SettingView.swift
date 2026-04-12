@@ -10,13 +10,11 @@ import SafariServices
 import Network
 
 struct SettingView: View {
-    // Session は signOut() のみ確実に存在する前提で参照
     @Environment(SessionStore.self) var session: SessionStore
+    @State private var viewModel = SettingViewModel()
 
     @State private var showLogoutAlert = false
     @State private var showDeleteAlert = false
-    @State private var isDeleting = false
-    @State private var deleteError: String?
 
     private let legalOnlineURL = URL(string: "https://weddingtimeline-d67a6.web.app/legal.html")! // 統合版（オンライン）
 
@@ -87,6 +85,7 @@ struct SettingView: View {
             }
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.inline)
+            .task { viewModel.configure(session: session) }
             .sheet(isPresented: $showLegalSafari) {
                 SafariSheetView(url: legalOnlineURL)
                     .ignoresSafeArea()
@@ -97,7 +96,7 @@ struct SettingView: View {
             .alert("ログアウトしますか？", isPresented: $showLogoutAlert) {
                 Button("キャンセル", role: .cancel) { }
                 Button("ログアウト", role: .destructive) {
-                    Task { await SignOutUseCase(session: session).execute() }
+                    Task { await viewModel.signOut() }
                 }
             } message: {
                 Text("ルームからログアウトします。よろしいですか？")
@@ -105,23 +104,21 @@ struct SettingView: View {
             .alert("アカウントを削除しますか？", isPresented: $showDeleteAlert) {
                 Button("キャンセル", role: .cancel) { }
                 Button("削除する", role: .destructive) {
-                    Task {
-                        await performAccountDeletion()
-                    }
+                    Task { await viewModel.deleteAccount() }
                 }
             } message: {
                 Text("あなたの投稿・プロフィール・いいね等の関連データが削除され、復元できません。よろしいですか？")
             }
             .alert("削除に失敗しました", isPresented: .init(
-                get: { deleteError != nil },
-                set: { if !$0 { deleteError = nil } }
+                get: { viewModel.deleteError != nil },
+                set: { if !$0 { viewModel.deleteError = nil } }
             )) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text(deleteError ?? "不明なエラー")
+                Text(viewModel.deleteError ?? "不明なエラー")
             }
             .overlay {
-                if isDeleting {
+                if viewModel.isDeleting {
                     ZStack {
                         Color.black.opacity(0.2).ignoresSafeArea()
                         VStack(spacing: 12) {
@@ -409,17 +406,6 @@ private extension SettingView {
     var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
         return "\(v)"
-    }
-
-    @MainActor
-    func performAccountDeletion() async {
-        isDeleting = true
-        defer { isDeleting = false }
-        do {
-            try await DeleteAccountUseCase(session: session).execute()
-        } catch {
-            deleteError = error.localizedDescription
-        }
     }
 
     static func isOnline() async -> Bool {
