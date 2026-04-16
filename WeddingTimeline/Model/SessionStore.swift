@@ -55,6 +55,45 @@ final class SessionStore {
     }
 }
 
+// MARK: - Cache Update Helpers
+
+extension SessionStore {
+    /// ユーザー名だけを更新してキャッシュに反映する（ChangeUsernameUseCase から呼ぶ）
+    func updateCachedUsername(_ newUsername: String) {
+        guard let current = cachedMember else { return }
+        cachedMember = CachedMember(
+            uid: current.uid,
+            roomId: current.roomId,
+            username: newUsername,
+            userIcon: current.userIcon
+        )
+    }
+
+    /// アイコン URL だけを更新してキャッシュに反映する（UpdateAvatarUseCase から呼ぶ）
+    ///
+    /// - Note: Firestore の保存キーは `avatarURL` だが RoomMemberDTO は `usericon` を読むため
+    ///         再フェッチでは URL が取得できない。このヘルパーで直接 URL を反映する。
+    func updateCachedUserIcon(_ urlString: String) {
+        guard let current = cachedMember else { return }
+        cachedMember = CachedMember(
+            uid: current.uid,
+            roomId: current.roomId,
+            username: current.username,
+            userIcon: urlString
+        )
+    }
+
+    /// RoomMember からキャッシュ全体を更新する
+    func updateCachedMember(_ member: RoomMember) {
+        cachedMember = CachedMember(
+            uid: member.id,
+            roomId: member.roomId,
+            username: member.username,
+            userIcon: member.usericon
+        )
+    }
+}
+
 // MARK: - CachedMemberDTO 変換
 
 private extension CachedMemberDTO {

@@ -7,6 +7,7 @@
 
 import Foundation
 
+@MainActor
 @Observable
 final class BestPostViewModel {
     var top3: [TimelinePost] = []
@@ -16,15 +17,19 @@ final class BestPostViewModel {
     // nil = すべて, .ceremony / .reception で絞り込み
     var selectedTag: PostTag? = nil
 
-    private let postRepo = PostRepository()
+    private let loadBestPostsUseCase: LoadBestPostsUseCase
 
-    @MainActor
+    init(loadBestPostsUseCase: LoadBestPostsUseCase = LoadBestPostsUseCase()) {
+        self.loadBestPostsUseCase = loadBestPostsUseCase
+    }
+
     func loadTop3(roomId: String) async {
         if isLoading { return }
         isLoading = true
         defer { isLoading = false }
         do {
-            let models = try await postRepo.fetchTopPosts(roomId: roomId, limit: 3, tag: selectedTag)
+            let input = LoadBestPostsUseCase.Input(roomId: roomId, limit: 3, tag: selectedTag)
+            let models = try await loadBestPostsUseCase.execute(input: input)
             self.top3 = models
             self.errorMessage = nil
         } catch {

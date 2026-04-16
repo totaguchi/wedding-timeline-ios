@@ -29,6 +29,9 @@ enum AppError: Error, LocalizedError {
     /// Firestore 書き込み失敗
     case firestoreError(Error)
     
+    /// 入力値が不正（空文字など）
+    case invalidInput(String)
+
     /// ネットワークエラー
     case networkError(Error)
     
@@ -60,11 +63,14 @@ enum AppError: Error, LocalizedError {
         case .firestoreError(let error):
             return "投稿の作成に失敗しました: \(error.localizedDescription)"
             
+        case .invalidInput(let message):
+            return message
+
         case .networkError(let error):
             return "ネットワークエラーが発生しました: \(error.localizedDescription)"
         }
     }
-    
+
     /// デバッグ用の詳細情報
     ///
     /// - Note: 開発環境でのみログ出力に使用
@@ -91,6 +97,9 @@ enum AppError: Error, LocalizedError {
         case .firestoreError(let error):
             return "[Firestore] Database error: \(error)"
             
+        case .invalidInput(let message):
+            return "[Input] Invalid input: \(message)"
+
         case .networkError(let error):
             return "[Network] Connection error: \(error)"
         }
@@ -125,6 +134,9 @@ extension AppError {
         case .transcodeError:
             return "別の動画を選択するか、時間をおいて再度お試しください"
             
+        case .invalidInput:
+            return "入力内容を確認してから再度お試しください"
+
         case .uploadFailed, .firestoreError, .networkError:
             return "ネットワーク接続を確認してから再度お試しください"
         }
