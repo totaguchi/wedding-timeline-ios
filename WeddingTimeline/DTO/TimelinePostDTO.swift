@@ -5,11 +5,11 @@
 //  Created by 田口友暉 on 2025/08/23.
 //
 
-import FirebaseFirestore
+@preconcurrency import FirebaseFirestore
 import Foundation
 
 struct TimelinePostDTO: Codable {
-    @DocumentID var id: String?            // 読み取り専用（書き込みでは使わない）
+    var id: String?                        // Firestore documentID は DataSource で設定する
     let content: String
     let authorId: String
     let authorName: String
@@ -28,7 +28,7 @@ struct TimelinePostDTO: Codable {
         case tag
     }
 
-    init(from decoder: Decoder) throws {
+    nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         
         // payload fields
@@ -42,5 +42,20 @@ struct TimelinePostDTO: Codable {
         retweetCount = try c.decodeIfPresent(Int.self, forKey: .retweetCount) ?? 0
         likeCount    = try c.decodeIfPresent(Int.self, forKey: .likeCount) ?? 0
         tag          = try c.decodeIfPresent(String.self, forKey: .tag) ?? ""
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+
+        try c.encode(content, forKey: .content)
+        try c.encode(authorId, forKey: .authorId)
+        try c.encode(authorName, forKey: .authorName)
+        try c.encodeIfPresent(userIcon, forKey: .userIcon)
+        try c.encodeIfPresent(createdAt, forKey: .createdAt)
+        try c.encode(media, forKey: .media)
+        try c.encode(replyCount, forKey: .replyCount)
+        try c.encode(retweetCount, forKey: .retweetCount)
+        try c.encodeIfPresent(likeCount, forKey: .likeCount)
+        try c.encodeIfPresent(tag, forKey: .tag)
     }
 }

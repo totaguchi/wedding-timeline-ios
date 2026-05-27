@@ -6,17 +6,22 @@
 //  Firestore データ削除 → Firebase Auth アカウント削除 → セッション状態クリアを行う。
 //
 
-import FirebaseAuth
 import Foundation
 
 @MainActor
 final class DeleteAccountUseCase {
     private let session: SessionStore
     private let roomRepo: RoomRepository
+    private let authDS: FirebaseAuthDataSource
 
-    init(session: SessionStore, roomRepo: RoomRepository = RoomRepository()) {
-        self.session = session
+    init(
+        session:  SessionStore,
+        roomRepo: RoomRepository       = RoomRepository(),
+        authDS:   FirebaseAuthDataSource = FirebaseAuthDataSource()
+    ) {
+        self.session  = session
         self.roomRepo = roomRepo
+        self.authDS   = authDS
     }
 
     func execute() async throws {
@@ -27,14 +32,12 @@ final class DeleteAccountUseCase {
                 userInfo: [NSLocalizedDescriptionKey: "削除対象のルームが見つかりません"]
             )
         }
+        // Firestore データ削除
         try await roomRepo.deleteMyAccount(in: roomIdSan)
-        // Firestore 削除後に Auth 削除が失敗した場合はエラーを伝播する。
-        // セッションは Auth アカウントも含め正常に削除できた場合のみクリアする。
-        if let user = Auth.auth().currentUser {
-            try await user.delete()
-        }
-        session.isLoggedIn = false
+        // Auth アカウント削除（Firestore 削除後に失敗した場合はエラーを伝播）
+        try await authDS.deleteCurrentUser()
+        session.isLoggedIn    = false
         session.currentRoomId = ""
-        session.cachedMember = nil
+        session.cachedMember  = nil
     }
 }

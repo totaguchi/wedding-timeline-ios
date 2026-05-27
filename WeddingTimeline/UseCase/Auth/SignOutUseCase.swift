@@ -6,17 +6,22 @@
 //  退室処理 → Firebase Auth サインアウト → セッション状態クリアを行う。
 //
 
-import FirebaseAuth
 import Foundation
 
 @MainActor
 final class SignOutUseCase {
     private let session: SessionStore
     private let roomRepo: RoomRepository
+    private let authDS: FirebaseAuthDataSource
 
-    init(session: SessionStore, roomRepo: RoomRepository = RoomRepository()) {
-        self.session = session
+    init(
+        session:  SessionStore,
+        roomRepo: RoomRepository       = RoomRepository(),
+        authDS:   FirebaseAuthDataSource = FirebaseAuthDataSource()
+    ) {
+        self.session  = session
         self.roomRepo = roomRepo
+        self.authDS   = authDS
     }
 
     func execute() async {
@@ -28,12 +33,12 @@ final class SignOutUseCase {
             }
         }
         do {
-            try Auth.auth().signOut()
+            try authDS.signOut()
         } catch {
             print("[SignOutUseCase] Auth.signOut failed: \(error)")
         }
-        session.isLoggedIn = false
+        session.isLoggedIn    = false
         session.currentRoomId = ""
-        session.cachedMember = nil
+        session.cachedMember  = nil
     }
 }

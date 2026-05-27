@@ -2,35 +2,44 @@
 //  RoomRepository.swift
 //  WeddingTimeline
 //
-//  Created by 田口友暉 on 2025/08/31.
+//  ルーム入退室・アカウント管理を担当する Repository。
+//  Firestore / Auth の直接操作は DataSource に委譲し、
+//  このクラスは orchestration とエラー変換に専念する。
 //
 
 import Foundation
-import FirebaseAuth
-import FirebaseFirestore
 
 // NOTE: username は表示名として重複許容。uniqueness ロックは使用しない。
 final class RoomRepository {
-    private lazy var db: Firestore = Firestore.firestore()
-    init() {}
-    init(db: Firestore) { self.db = db }
 
-    // 1) 匿名サインイン（必要なら）
-    func signInAnonymouslyIfNeeded() async throws -> String {
-        if let current = Auth.auth().currentUser {
-            return current.uid
-        }
-        let result = try await Auth.auth().signInAnonymously()
-        return result.user.uid
+    // MARK: - Dependencies
+
+    private let firestoreDS: FirestoreRoomDataSource
+    private let authDS: FirebaseAuthDataSource
+
+    init(
+        firestoreDS: FirestoreRoomDataSource = FirestoreRoomDataSource(),
+        authDS:      FirebaseAuthDataSource  = FirebaseAuthDataSource()
+    ) {
+        self.firestoreDS = firestoreDS
+        self.authDS      = authDS
     }
-    
-    // 2) ルームに入室（roomId + roomKey + username）
+
+    // MARK: - Auth
+
+    /// 匿名サインインが未実施なら実施し UID を返す
+    func signInAnonymouslyIfNeeded() async throws -> String {
+        try await authDS.ensureSignedIn()
+    }
+
+    // MARK: - Room
+
+    /// ルームに入室する（匿名サインイン → 存在確認 → トランザクション）
     func joinRoom(_ params: JoinParams) async throws {
-        let roomIdSan = params.roomId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let roomKeySan = params.roomKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let roomIdSan   = params.roomId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let roomKeySan  = params.roomKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let userNameSan = params.username.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // 入力チェック（画面にそのまま出せる文言）
         guard !roomIdSan.isEmpty else {
             throw NSError(domain: "JoinRoom", code: 1001, userInfo: [
                 NSLocalizedDescriptionKey: "ルームIDを入力してください。"
@@ -47,342 +56,58 @@ final class RoomRepository {
             ])
         }
 
-        let uid = try await signInAnonymouslyIfNeeded()
-        
-        // 既に会員かどうかを先に確認
-        let existed = try await isUserAlreadyInRoom(roomId: roomIdSan, uid: uid)
+        let uid     = try await authDS.ensureSignedIn()
+        let existed = try await firestoreDS.isUserAlreadyInRoom(roomId: roomIdSan, uid: uid)
 
-        let roomRef   = db.collection("rooms").document(roomIdSan)
-        let memberRef = roomRef.collection("members").document(uid)
-        let usernameLower = userNameSan.lowercased()
+        // DataSource 内でエラーマッピング済み
+        try await firestoreDS.joinMember(
+            roomId: roomIdSan,
+            uid: uid,
+            params: params,
+            existed: existed
+        )
 
-        // NOTE: roomSecrets はクライアントから読まない。providedKey はルール側で照合。
-        do {
-            try await runTransactionAsync(db: db) { (txn: FirebaseFirestore.Transaction) in
-                if existed {
-                    // (1) 既存会員: 表示名/アイコン/最終サインイン時間だけ更新（providedKey は送らない）
-                    var updates: [String: Any] = [
-                        "username": userNameSan,
-                        "usernameLower": usernameLower,
-                        "lastSignedInAt": FieldValue.serverTimestamp(),
-                        "userIcon": params.selectedIcon
-                    ]
-                    txn.setData(updates, forDocument: memberRef, merge: true)
-                } else {
-                    // (1) 新規作成: providedKey を含めて create（ルールで検証）
-                    var memberData: [String: Any] = [
-                        "username": userNameSan,
-                        "usernameLower": usernameLower,
-                        "role": "member",
-                        "joinedAt": FieldValue.serverTimestamp(),
-                        "lastSignedInAt": FieldValue.serverTimestamp(),
-                        "isBanned": false,
-                        "mutedUntil": NSNull(),
-                        "providedKey": roomKeySan,
-                        "userIcon": params.selectedIcon
-                    ]
-                    txn.setData(memberData, forDocument: memberRef, merge: false)
-                }
-            }
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] joinRoom transaction failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw self.mapJoinError(error, roomId: roomIdSan)
-        }
-
-        // create のときのみ providedKey を消す
         if !existed {
             do {
-                try await memberRef.updateData(["providedKey": FieldValue.delete()])
+                try await firestoreDS.removeProvidedKey(roomId: roomIdSan, uid: uid)
             } catch {
-                // ここは致命的でない（入室自体は成功）。ログ出力のみに留めるか、必要ならユーザー文言に変換して投げる
-                let ns = error as NSError
-                print("[RoomRepository] cleanup providedKey failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-                // 失敗しても入室自体は完了しているため、画面には出さない運用にする（必要なら throw mapJoinError(error, roomId: roomIdSan)）
+                // 入室自体は完了しているため、ログ出力のみ
+                print("[RoomRepository] cleanup providedKey failed: \(error)")
             }
         }
     }
-    
-    // 3) ルーム内での username 変更
-    func changeUsername(roomId: String, newUsername: String) async throws {
-        guard let uid = Auth.auth().currentUser?.uid else { throw JoinError.notSignedIn }
 
-        // 入力サニタイズ
-        let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let usernameSan = newUsername.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !usernameSan.isEmpty else {
-            throw NSError(domain: "User", code: 400, userInfo: [NSLocalizedDescriptionKey: "ユーザー名を入力してください"])
-        }
-
-        let roomRef   = db.collection("rooms").document(roomIdSan)
-        let memberRef = roomRef.collection("members").document(uid)
-
-        let newLower  = usernameSan.lowercased()
-
-        do {
-            try await runTransactionAsync(db: db) { (txn: FirebaseFirestore.Transaction) in
-                // username は表示名として重複を許容するため、ロック操作は不要
-                txn.setData([
-                    "username": usernameSan,
-                    "usernameLower": newLower
-                ], forDocument: memberRef, merge: true)
-            }
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] changeUsername failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            // ルールの一意性制約に引っかかった場合は PermissionDenied(=7) になる想定
-            if (ns.domain == FirestoreErrorDomain || ns.domain == "FIRFirestoreErrorDomain") && ns.code == 7 {
-                throw JoinError.usernameTaken
-            }
-            throw error
-        }
-    }
-
-    // 4) 退室（ロック解放＋member削除＋カウント減）
+    /// 退室する（会員ドキュメント削除）
     func leaveRoom(roomId: String) async throws {
+        guard let uid = authDS.currentUID() else { throw JoinError.notSignedIn }
         let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let uid = Auth.auth().currentUser?.uid else { throw JoinError.notSignedIn }
-        let roomRef   = db.collection("rooms").document(roomIdSan)
-        let memberRef = roomRef.collection("members").document(uid)
-
-        try await runTransactionAsync(db: db) { (txn: FirebaseFirestore.Transaction) in
-            // 会員 doc
-            let memberSnap = try txn.getDocument(memberRef)
-            guard let member = memberSnap.data() else { return }
-
-            // 会員 doc 削除
-            txn.deleteDocument(memberRef)
-        }
+        try await firestoreDS.leaveRoom(roomId: roomIdSan, uid: uid)
     }
-    
-    // 5) アカウント削除（指定ルーム内の自分の痕跡を削除：likes / userLikes / 自分の投稿 / members）
-    /// Firestore 側のみ削除します（Storage のメディア削除は別サービスで対応してください）
+
+    /// アカウントを削除する（指定ルーム内の自分の痕跡を削除）
     func deleteMyAccount(in roomId: String) async throws {
-        guard let uid = Auth.auth().currentUser?.uid else { throw JoinError.notSignedIn }
+        guard let uid = authDS.currentUID() else { throw JoinError.notSignedIn }
         let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let roomRef = db.collection("rooms").document(roomIdSan)
-
-        // 1) /rooms/{roomId}/userLikes/{uid}/posts/* を削除
-        do {
-            let userLikesPosts = roomRef
-                .collection("userLikes")
-                .document(uid)
-                .collection("posts")
-            try await batchDelete(query: userLikesPosts)
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] deleteMyAccount userLikes cleanup failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw error
-        }
-
-        // 2) collectionGroup("likes") から自分の like を当該ルーム分だけ削除
-        //    （要インデックス： userId / roomId / __name__）
-        do {
-            let likesGroup = db.collectionGroup("likes")
-                .whereField("userId", isEqualTo: uid)
-                .whereField("roomId", isEqualTo: roomIdSan)
-            try await batchDelete(query: likesGroup)
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] deleteMyAccount likes cleanup failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw error
-        }
-
-        // 3) 自分が author の投稿を削除（各投稿の likes サブコレクションを先に削除）
-        do {
-            var last: DocumentSnapshot?
-            while true {
-                var q = roomRef.collection("posts")
-                    .whereField("authorId", isEqualTo: uid)
-                    .order(by: FieldPath.documentID())
-                    .limit(to: 200)
-                if let last { q = q.start(afterDocument: last) }
-                let snap = try await q.getDocuments(source: .server)
-                if snap.documents.isEmpty { break }
-
-                // 各ポストの likes をクリア → 本体をまとめて削除
-                let batch = db.batch()
-                for doc in snap.documents {
-                    let postRef = doc.reference
-                    // サブコレ likes を全削除
-                    let likes = postRef.collection("likes")
-                    try await batchDelete(query: likes)
-                    // 本体削除
-                    batch.deleteDocument(postRef)
-                }
-                try await batch.commit()
-                last = snap.documents.last
-            }
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] deleteMyAccount authored posts cleanup failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw error
-        }
-
-        // 4) members/{uid} を削除（最終）
-        do {
-            let memberRef = roomRef.collection("members").document(uid)
-            try await memberRef.delete()
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] deleteMyAccount member delete failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw error
-        }
+        try await firestoreDS.deleteMyAccount(in: roomIdSan, uid: uid)
     }
 
-    // MARK: - Helpers
-    /// 指定クエリの結果をページングしながら一括削除（__name__ でソート → start(after:)）
-    private func batchDelete(query base: Query, pageSize: Int = 300) async throws {
-        var last: DocumentSnapshot? = nil
-        while true {
-            var q = base.order(by: FieldPath.documentID()).limit(to: pageSize)
-            if let last { q = q.start(afterDocument: last) }
-            let snap = try await q.getDocuments(source: .server)
-            if snap.documents.isEmpty { break }
-            let batch = db.batch()
-            for d in snap.documents {
-                batch.deleteDocument(d.reference)
-            }
-            try await batch.commit()
-            last = snap.documents.last
-        }
-    }
+    // MARK: - Fetch
 
-    
-    /// 指定したルームにすでに入室済みかを確認する
+    /// 指定ルームにすでに入室済みかを確認する
     func isUserAlreadyInRoom(roomId: String, uid: String) async throws -> Bool {
         let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let memberRef = db
-            .collection("rooms")
-            .document(roomIdSan)
-            .collection("members")
-            .document(uid)
-        do {
-            // サーバー優先で存在確認（キャッシュの残骸に左右されない）
-            let snapshot = try await memberRef.getDocument(source: .server)
-            return snapshot.exists
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] isUserAlreadyInRoom failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw error
-        }
+        return try await firestoreDS.isUserAlreadyInRoom(roomId: roomIdSan, uid: uid)
     }
-    
-    // MARK: - Fetch (single shot)
-    /// 自分の会員プロフィールを単発取得（サーバー優先）。
-    /// 返却は UI で使いやすい最小セット（username / userIcon）。
+
+    /// 自分の会員プロフィールを単発取得する（サーバー優先）
+    ///
+    /// - Returns: `username` / `userIcon` の最小セット。存在しない場合は nil
     func fetchRoomUser(roomId: String, uid: String) async throws -> (username: String, userIcon: String?)? {
         let roomIdSan = roomId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ref = db.collection("rooms").document(roomIdSan)
-            .collection("members").document(uid)
-        do {
-            let snap = try await ref.getDocument(source: .server)
-            guard let data = snap.data() else { return nil }
-            guard let username = data["username"] as? String, !username.isEmpty else { return nil }
-            let userIcon = data["userIcon"] as? String
-            return (username: username, userIcon: userIcon)
-        } catch {
-            let ns = error as NSError
-            print("[RoomRepository] fetchRoomUser failed: domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)")
-            throw error
+        guard let dto = try await firestoreDS.fetchMemberDTO(roomId: roomIdSan, uid: uid) else {
+            return nil
         }
+        guard !dto.username.isEmpty else { return nil }
+        return (username: dto.username, userIcon: dto.usericon)
     }
-   
-    // MARK: - Error mapping (user friendly)
-    /// Firestore/Auth/Network のエラーを画面向けの文言に変換
-    private func mapJoinError(_ error: Error, roomId: String) -> NSError {
-        let ns = error as NSError
-        let domain = ns.domain
-
-        // Firestore
-        if domain == FirestoreErrorDomain || domain == "FIRFirestoreErrorDomain" {
-            let msg: String
-            switch ns.code {
-            case 7: // permission-denied
-                // B方式（rules内 get で roomKey を照合）の場合、キー不一致/roomId誤り/未会員読みなどがすべて permission-denied に集約される
-                msg = "入室に失敗しました。ルームIDまたは入室キーが正しいか確認してください。"
-            case 5: // not-found
-                msg = "指定のルームが見つかりませんでした。ルームIDをご確認ください。"
-            case 4: // deadline-exceeded
-                msg = "タイムアウトしました。通信環境を確認して、もう一度お試しください。"
-            case 14: // unavailable
-                msg = "サーバーに接続できませんでした。しばらくしてから再度お試しください。"
-            case 2: // cancelled
-                msg = "操作がキャンセルされました。再度お試しください。"
-            default:
-                msg = "入室に失敗しました（\(ns.code)）。しばらくしてから再度お試しください。"
-            }
-            return NSError(domain: "JoinRoom", code: ns.code, userInfo: [
-                NSLocalizedDescriptionKey: msg,
-                NSUnderlyingErrorKey: ns
-            ])
-        }
-
-        // Auth
-        if domain == AuthErrorDomain || domain == "FIRAuthErrorDomain" {
-            let code = ns.code
-            let msg: String
-            switch code {
-            case AuthErrorCode.networkError.rawValue:
-                msg = "ネットワークエラーのためサインインできませんでした。通信状況を確認して再度お試しください。"
-            case AuthErrorCode.tooManyRequests.rawValue:
-                msg = "リクエストが集中しています。時間をおいて再度お試しください。"
-            default:
-                msg = "サインインに失敗しました。もう一度お試しください。"
-            }
-            return NSError(domain: "JoinRoom", code: code, userInfo: [
-                NSLocalizedDescriptionKey: msg,
-                NSUnderlyingErrorKey: ns
-            ])
-        }
-
-        // Networking
-        if domain == NSURLErrorDomain {
-            let msg: String
-            switch ns.code {
-            case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut:
-                msg = "ネットワークに接続できません。通信環境を確認して再度お試しください。"
-            default:
-                msg = "通信エラーが発生しました。時間をおいてお試しください。"
-            }
-            return NSError(domain: "JoinRoom", code: ns.code, userInfo: [
-                NSLocalizedDescriptionKey: msg,
-                NSUnderlyingErrorKey: ns
-            ])
-        }
-
-        // Fallback
-        return NSError(domain: "JoinRoom", code: ns.code, userInfo: [
-            NSLocalizedDescriptionKey: "入室に失敗しました。しばらくしてから再度お試しください。",
-            NSUnderlyingErrorKey: ns
-        ])
-    }
-    
-    // MARK: - Transaction async wrapper
-    // NOTE: Session は @MainActor だが、Firestore のトランザクションは内部スレッドで実行される。
-    // MainActor 隔離のクロージャをそのまま渡すと実行キュー不一致でクラッシュするため、
-    // nonisolated のヘルパに切り出し、MainActor に依存しない値だけをキャプチャして実行する。
-    private nonisolated func runTransactionAsync(
-        db: Firestore,
-        body: @Sendable @escaping (FirebaseFirestore.Transaction) throws -> Void
-    ) async throws {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            db.runTransaction({ (txn, errorPointer) -> Any? in
-                do {
-                    try body(txn)
-                    return nil
-                } catch {
-                    errorPointer?.pointee = error as NSError
-                    return nil
-                }
-            }, completion: { _, err in
-                if let err {
-                    cont.resume(throwing: err)
-                } else {
-                    cont.resume(returning: ())
-                }
-            })
-        }
-    }
-    
 }
